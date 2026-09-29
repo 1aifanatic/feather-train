@@ -129,6 +129,70 @@ async def test_most_specific_grant_controls_external_writes(tmp_path):
     assert protected.read_text() == "protected"
 
 
+async def test_writes_and_edits_follow_symlinks_the_path_check_allows(tmp_path):
+    root = tmp_path / "workspace"
+    (root / "real").mkdir(parents=True)
+    (root / "real" / "f.txt").write_text("old")
+    (root / "link").symlink_to(root / "real", target_is_directory=True)
+    (root / "flink").symlink_to(root / "real" / "f.txt")
+    files = FileTools(LocalFileRuntime(root))
+
+    assert (await invoke(files, "write", "link/new.txt", content="hi")).error is None
+    await invoke(files, "read", "flink")
+    assert (await invoke(files, "write", "flink", content="new")).error is None
+    edited = await invoke(files, "edit", "link/new.txt", old_string="hi", new_string="bye")
+    assert edited.error is None
+
+    assert (root / "real" / "new.txt").read_text() == "bye"
+    assert (root / "real" / "f.txt").read_text() == "new"
+    assert (root / "flink").is_symlink()
+    # Revisions stay keyed by the path the model used.
+    assert set(files.revisions) == {"link/new.txt", "flink"}
+
+
+async def test_symlink_into_an_external_write_grant_is_writable(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    (root / "out").symlink_to(external, target_is_directory=True)
+    files = FileTools(LocalFileRuntime(root, write_grants=(external,)))
+
+    assert (await invoke(files, "write", "out/report.md", content="done")).error is None
+    assert (external / "report.md").read_text() == "done"
+
+
+async def test_symlink_to_an_ungranted_location_is_refused(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "out").symlink_to(outside, target_is_directory=True)
+    files = FileTools(LocalFileRuntime(root))
+
+    result = await invoke(files, "write", "out/report.md", content="done")
+
+    assert result.error == "invalid_path"
+    assert list(outside.iterdir()) == []
+
+
+async def test_exact_file_grant_allows_the_file_but_not_new_parents(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    granted = external / "notes.txt"
+    granted.write_text("before")
+    missing = external / "missing" / "new.txt"
+    files = FileTools(LocalFileRuntime(root, write_grants=(granted, missing)))
+
+    await invoke(files, "read", granted)
+    assert (await invoke(files, "write", granted, content="after")).error is None
+    assert granted.read_text() == "after"
+    assert (await invoke(files, "write", missing, content="x")).error is not None
+    assert not missing.parent.exists()
+
+
 async def test_unrepresentable_replacement_does_not_change_file_or_revision(tmp_path):
     path = tmp_path / "notes.txt"
     original = b"Caf\xe9 " * 40

@@ -10,6 +10,7 @@ import sys
 import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
@@ -65,6 +66,25 @@ def invalid_path(display: str, parameter: str = "file_path") -> NoReturn:
     )
 
 
+@dataclass(frozen=True)
+class WriteTarget:
+    """A file write that path validation approved.
+
+    ``display`` is the path the model asked for; revisions and messages use it.
+    ``path`` is the resolved target that validation checked, and writes reach it
+    through ``boundary`` (a resolved write root, or an exact file grant's parent).
+    Carrying the target means an alias re-pointed after validation cannot
+    redirect the write, and no second resolve can pick an unchecked target.
+    """
+
+    display: str
+    path: Path
+    boundary: Path
+    relative: Path
+    metadata: os.stat_result | None
+    exact_grant: bool
+
+
 def require_file(
     root: str | Path,
     read_grants: Sequence[str],
@@ -74,7 +94,49 @@ def require_file(
     for_write: bool = False,
     allow_missing: bool = False,
 ) -> tuple[Path, str, os.stat_result | None]:
-    candidate, display, metadata = require_path(
+    candidate, _target, display, metadata = _require_file(
+        root,
+        read_grants,
+        raw,
+        write_grants=write_grants,
+        for_write=for_write,
+        allow_missing=allow_missing,
+    )
+    return candidate, display, metadata
+
+
+def require_write_target(
+    root: str | Path,
+    read_grants: Sequence[str],
+    raw: str,
+    *,
+    write_grants: Sequence[str] = (),
+    allow_missing: bool = False,
+) -> WriteTarget:
+    _candidate, target, display, metadata = _require_file(
+        root,
+        read_grants,
+        raw,
+        write_grants=write_grants,
+        for_write=True,
+        allow_missing=allow_missing,
+    )
+    boundary, relative, exact_grant = _write_boundary(
+        target, Path(root).resolve(), [Path(grant).resolve() for grant in write_grants]
+    )
+    return WriteTarget(display, target, boundary, relative, metadata, exact_grant)
+
+
+def _require_file(
+    root: str | Path,
+    read_grants: Sequence[str],
+    raw: str,
+    *,
+    write_grants: Sequence[str],
+    for_write: bool,
+    allow_missing: bool,
+) -> tuple[Path, Path, str, os.stat_result | None]:
+    candidate, target, display, metadata = _validate_path(
         root,
         read_grants,
         raw,
@@ -84,7 +146,7 @@ def require_file(
     )
     if metadata is None:
         if allow_missing:
-            return candidate, display, None
+            return candidate, target, display, None
         raise FileToolError(f"Invalid `file_path` parameter: {raw}. The file does not exist.")
     if stat.S_ISDIR(metadata.st_mode):
         if allow_missing:
@@ -98,7 +160,7 @@ def require_file(
         raise FileToolError(
             f"Invalid `file_path` parameter: {raw}. The path is not a regular file."
         )
-    return candidate, display, metadata
+    return candidate, target, display, metadata
 
 
 def _from_msys_path(raw: str) -> str:
@@ -118,6 +180,29 @@ def require_path(
     allow_missing: bool = False,
     parameter: str = "file_path",
 ) -> tuple[Path, str, os.stat_result | None]:
+    candidate, _target, display, metadata = _validate_path(
+        root,
+        read_grants,
+        raw,
+        write_grants=write_grants,
+        for_write=for_write,
+        allow_missing=allow_missing,
+        parameter=parameter,
+    )
+    return candidate, display, metadata
+
+
+def _validate_path(
+    root: str | Path,
+    read_grants: Sequence[str],
+    raw: str,
+    *,
+    write_grants: Sequence[str] = (),
+    for_write: bool = False,
+    allow_missing: bool = False,
+    parameter: str = "file_path",
+) -> tuple[Path, Path, str, os.stat_result | None]:
+    """Return the requested path, its resolved target, display text, and metadata."""
     output_directory = _output_directory(root)
     if not output_directory.is_symlink():
         read_grants = (*read_grants, str(output_directory))
@@ -175,7 +260,7 @@ def require_path(
             ) from None
         except FileNotFoundError:
             if allow_missing:
-                return candidate, display, None
+                return candidate, resolved, display, None
             raise FileToolError(
                 f"Invalid `{parameter}` parameter: {display}. A parent directory does not exist."
             ) from None
@@ -190,8 +275,8 @@ def require_path(
             f"Invalid `{parameter}` parameter: {display}. The parent component {candidate.parent.name!r} is not a directory."
         ) from None
     except FileNotFoundError:
-        return candidate, display, None
-    return candidate, display, metadata
+        return candidate, resolved, display, None
+    return candidate, resolved, display, metadata
 
 
 def _is_binary(data: bytes) -> bool:
@@ -352,13 +437,10 @@ def check_revision(display: str, expected: str, actual: str) -> None:
 
 
 def write_text(
-    path: Path,
-    display: str,
+    target: WriteTarget,
     content: str,
     encoding: str,
     *,
-    root: str | Path,
-    write_grants: Sequence[str] = (),
     create_parents: bool = False,
 ) -> str:
     # Encode before opening the file for writing, so an unrepresentable character
@@ -367,32 +449,31 @@ def write_text(
         data = content.encode(encoding)
     except UnicodeEncodeError:
         raise FileToolError(
-            f"The updated content cannot be represented in {display}'s current {encoding} encoding; no changes were made."
+            f"The updated content cannot be represented in {target.display}'s current {encoding} encoding; no changes were made."
         ) from None
     if os.name == "nt" or not _supports_safe_relative_write():
         # No dir_fd/O_NOFOLLOW here (Windows), so this path cannot rule out a
-        # concurrent junction swap; it re-checks the resolved target right
-        # before each mutation instead.
-        allowed = [Path(root).resolve(), *(Path(grant).resolve() for grant in write_grants)]
+        # concurrent junction swap. The validated target is already resolved, so
+        # a link or junction added on it since makes it resolve elsewhere;
+        # re-check that right before each mutation.
+        def require_unchanged() -> None:
+            if target.path.resolve() != target.path:
+                _unsafe_write_path(target.display)
 
-        def require_allowed(target: Path) -> None:
-            if not any(target.resolve().is_relative_to(boundary) for boundary in allowed):
-                invalid_path(display)
-
-        require_allowed(path)
+        require_unchanged()
         if create_parents:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            require_allowed(path)
-        path.write_bytes(data)
+            target.path.parent.mkdir(parents=True, exist_ok=True)
+            require_unchanged()
+        target.path.write_bytes(data)
     else:
-        _write_bytes_relative(
-            path,
-            data,
-            root=Path(root),
-            write_grants=write_grants,
-            create_parents=create_parents,
-        )
+        _write_bytes_relative(target, data, create_parents=create_parents)
     return hashlib.sha256(data).hexdigest()
+
+
+def _unsafe_write_path(display: str) -> NoReturn:
+    raise FileToolError(
+        f"File validation failed for {display}: the write path could not be opened safely."
+    )
 
 
 def _supports_safe_relative_write() -> bool:
@@ -404,19 +485,18 @@ def _supports_safe_relative_write() -> bool:
     )
 
 
-def _write_bytes_relative(
-    path: Path,
-    data: bytes,
-    *,
-    root: Path,
-    write_grants: Sequence[str],
-    create_parents: bool,
-) -> None:
-    boundary, relative = _write_boundary(path, root, write_grants)
+def _write_bytes_relative(target: WriteTarget, data: bytes, *, create_parents: bool) -> None:
+    # Walk the validated target from its resolved boundary with O_NOFOLLOW on
+    # every component, so a link swapped onto that path fails the walk. Only
+    # components below the boundary are protected; the boundary is opened by
+    # its absolute path.
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    directory_fd = os.open(boundary.resolve(), directory_flags)
     try:
-        for component in relative.parts[:-1]:
+        directory_fd = os.open(target.boundary, directory_flags)
+    except OSError as exc:
+        _raise_path_error(exc, target.display)
+    try:
+        for component in target.relative.parts[:-1]:
             try:
                 next_fd = os.open(component, directory_flags, dir_fd=directory_fd)
             except FileNotFoundError:
@@ -427,7 +507,7 @@ def _write_bytes_relative(
             os.close(directory_fd)
             directory_fd = next_fd
         file_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
-        file_fd = os.open(relative.name, file_flags, 0o666, dir_fd=directory_fd)
+        file_fd = os.open(target.relative.name, file_flags, 0o666, dir_fd=directory_fd)
         try:
             view = memoryview(data)
             while view:
@@ -436,33 +516,41 @@ def _write_bytes_relative(
         finally:
             os.close(file_fd)
     except OSError as exc:
-        if exc.errno in {errno.ELOOP, errno.ENOENT, errno.ENOTDIR, getattr(errno, "ESTALE", -1)}:
-            raise FileToolError(
-                f"File validation failed for {path}: a path component changed during the write."
-            ) from exc
-        raise
+        _raise_path_error(exc, target.display)
     finally:
         os.close(directory_fd)
 
 
+def _raise_path_error(exc: OSError, display: str) -> NoReturn:
+    # A link swapped onto the path (ELOOP), or a component that is missing or
+    # is not a folder (for example an exact file grant whose parent is gone).
+    if exc.errno in {errno.ELOOP, errno.ENOENT, errno.ENOTDIR, getattr(errno, "ESTALE", -1)}:
+        _unsafe_write_path(display)
+    raise exc
+
+
 def _write_boundary(
-    path: Path,
+    target: Path,
     root: Path,
-    write_grants: Sequence[str],
-) -> tuple[Path, Path]:
-    candidates: list[tuple[Path, Path]] = []
-    for raw_boundary in (root, *(Path(grant) for grant in write_grants)):
-        boundary = Path(os.path.abspath(raw_boundary))
-        if path == boundary and boundary != root:
-            candidates.append((boundary.parent, Path(boundary.name)))
-        elif path.is_relative_to(boundary):
-            candidates.append((boundary, path.relative_to(boundary)))
+    write_grants: Sequence[Path],
+) -> tuple[Path, Path, bool]:
+    """Pick the deepest resolved write root containing ``target``.
+
+    Returns the boundary, the target relative to it, and whether the target is
+    an exact file grant (whose boundary is the grant's parent).
+    """
+    candidates: list[tuple[Path, Path, bool]] = []
+    for boundary in (root, *write_grants):
+        if target == boundary and boundary != root:
+            candidates.append((boundary.parent, Path(boundary.name), True))
+        elif target.is_relative_to(boundary):
+            candidates.append((boundary, target.relative_to(boundary), False))
     if not candidates:
-        invalid_path(str(path))
-    boundary, relative = max(candidates, key=lambda item: len(item[0].parts))
+        invalid_path(str(target))
+    boundary, relative, exact_grant = max(candidates, key=lambda item: len(item[0].parts))
     if not relative.parts or relative.name in {"", ".", ".."}:
-        invalid_path(str(path))
-    return boundary, relative
+        invalid_path(str(target))
+    return boundary, relative, exact_grant
 
 
 def main(invoke):
