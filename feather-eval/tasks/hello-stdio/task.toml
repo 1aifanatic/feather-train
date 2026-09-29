@@ -1,0 +1,23 @@
+version = "1.0"
+
+[metadata]
+name = "Feather stdio MCP smoke"
+description = "A small integration fixture, not a benchmark."
+
+[agent]
+timeout_sec = 300
+user = "agent"
+
+[verifier]
+timeout_sec = 30
+
+[environment]
+build_timeout_sec = 300
+cpus = 1
+memory_mb = 2048
+storage_mb = 4096
+
+[[environment.mcp_servers]]
+name = "token"
+transport = "stdio"
+command = "/usr/local/bin/hello-stdio-server"

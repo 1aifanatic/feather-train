@@ -1,0 +1,94 @@
+"""Noninteractive local Feather entrypoint."""
+
+import argparse
+import asyncio
+import json
+import logging
+import sys
+from pathlib import Path
+
+from openai import AsyncOpenAI
+from pydantic import Field
+
+from .core.compaction import CompactionConfig
+from .core.messages import FrozenModel
+from .core.model import ChatCompletionsModel, ModelSettings
+from .core.runner import AgentRunError
+from .local import run_local
+from .production import Profile
+from .tools.mcp import McpServerSpec
+
+logger = logging.getLogger(__name__)
+
+
+class LocalConfig(FrozenModel):
+    model: str = Field(min_length=1)
+    base_url: str | None = None
+    workspace: Path = Path(".")
+    profile: Profile = "prod"
+    enable_image_tools: bool | None = None
+    max_turns: int = Field(default=100, ge=1)
+    model_settings: ModelSettings = Field(default_factory=ModelSettings)
+    compaction: CompactionConfig = Field(default_factory=CompactionConfig)
+    mcp_servers: tuple[McpServerSpec, ...] = ()
+    skills_dir: Path | None = None
+
+
+async def run(config: LocalConfig, prompt: str) -> int:
+    async with AsyncOpenAI(base_url=config.base_url, max_retries=2) as client:
+        try:
+            result = await run_local(
+                prompt,
+                model=ChatCompletionsModel(client=client, model=config.model),
+                workspace=config.workspace,
+                max_turns=config.max_turns,
+                model_settings=config.model_settings,
+                compaction=config.compaction,
+                mcp_servers=config.mcp_servers,
+                skills_dir=config.skills_dir,
+                profile=config.profile,
+                enable_image_tools=config.enable_image_tools,
+            )
+        except AgentRunError as exc:
+            # Preserve the loop's partial transcript when a model or tool fails.
+            sys.stdout.write(exc.result.model_dump_json() + "\n")
+            logger.error("%s", exc)
+            return 1
+    sys.stdout.write(result.model_dump_json() + "\n")
+    return 0 if result.stop_reason == "completed" else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run Feather on one task in a local workspace.")
+    parser.add_argument("prompt", help="Task instructions; use '-' to read them from stdin.")
+    parser.add_argument("--config", type=Path, help="JSON configuration file.")
+    parser.add_argument("--model", help="Model identifier at the Chat Completions endpoint.")
+    parser.add_argument(
+        "--base-url", help="OpenAI-compatible API base URL, including /v1 when needed."
+    )
+    parser.add_argument(
+        "--workdir",
+        dest="workspace",
+        help="Existing workspace directory (default: current directory).",
+    )
+    parser.add_argument("--max-turns", type=int, help="Maximum agent turns (default: 100).")
+    parser.add_argument("--profile", choices=("train", "prod"), help="Startup profile (default: prod).")
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.WARNING, format="%(message)s")
+    try:
+        values = json.loads(args.config.read_text()) if args.config else {}
+        overrides = {
+            name: getattr(args, name)
+            for name in ("model", "base_url", "workspace", "max_turns", "profile")
+            if getattr(args, name) is not None
+        }
+        config = LocalConfig.model_validate({**values, **overrides})
+        prompt = sys.stdin.read() if args.prompt == "-" else args.prompt
+        if not prompt.strip():
+            raise ValueError("Task instructions must not be empty")
+        return asyncio.run(run(config, prompt))
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        logger.error("%s: %s", type(exc).__name__, exc)
+        return 1

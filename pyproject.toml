@@ -1,0 +1,5 @@
+[tool.uv.workspace]
+members = ["feather-harness", "feather-train", "feather-eval"]
+
+[tool.uv.sources]
+feather-harness = { workspace = true }

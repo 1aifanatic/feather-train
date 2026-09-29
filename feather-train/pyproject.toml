@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "feather-train"
+version = "0.1.0"
+description = "Feather rollouts and grading on E2B task worlds, with a reference Tinker integration."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = ["feather-harness==0.1.0", "e2b==2.42.0", "tenacity>=9.1,<10"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=1", "ruff>=0.4"]
+verifiers = ["verifiers==0.2.1", "renderers==0.1.8", "braintrust>=0.0.160", "huggingface-hub>=1.3.5", "pyyaml>=6.0.1", "tokenizers>=0.21"]
+
+tinker = ["feather-train[verifiers]", "tinker==0.30.1", "httpx>=0.27,<1"]
+
+training = ["feather-train[tinker]", "tinker-cookbook[wandb]==0.5.7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/feather_train"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["docker: requires Docker and the feather-e2b-test image"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

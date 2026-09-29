@@ -1,0 +1,1 @@
+Read inventory.csv in the current working directory. Create summary.json containing exactly two fields: total_quantity (the sum of all quantities) and item_count (the number of item rows). Preserve inventory.csv. Use Feather's read and write tools for the file operations, then use Bash to display summary.json to verify it. Do not create any other deliverable files.

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "feather-harness"
+version = "0.1.0"
+description = "Lightweight agent harness for knowledge work with Paper tools and skills."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "licenses/*"]
+requires-python = ">=3.12"
+dependencies = ["openai==2.45.0", "pydantic>=2.12.5,<3", "charset-normalizer==3.4.7", "mcp>=1.27.1,<2", "httpx>=0.28,<1", "tenacity>=9.1,<10"]
+
+[project.optional-dependencies]
+office = [
+    "paper-docx==0.2.0",
+    "paper-pptx==0.2.0",
+    "paper-xlsx==0.2.1",
+    "reportlab>=4,<5",
+    "pypdf>=6,<7",
+    "pdfplumber>=0.11,<0.12",
+    "pdf2image>=1.17,<2",
+    "Pillow>=10.3,<13",
+]
+dev = ["pytest>=8", "pytest-asyncio>=1", "ruff>=0.4"]
+
+[project.scripts]
+feather = "feather_harness.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/feather_harness"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
