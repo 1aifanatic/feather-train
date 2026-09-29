@@ -9,7 +9,7 @@ with model training.
 
 | Package | Purpose |
 | --- | --- |
-| [Feather Harness](feather-harness/README.md) | Agent loop, file and shell tools, Paper document skills, context compaction, and a local CLI. |
+| [Feather Harness](feather-harness/README.md) | **prod:** Agent loop, file and shell tools, Paper document skills, context compaction, and a local CLI with professional guidance and image support.<br>**train:** The same loop and tools with minimal prompts and original skill guidance for training. |
 | [Feather Train](feather-train/README.md) | Rollouts and grading on snapshotted E2B worlds, Braintrust logging, and a reference Tinker training integration through Verifiers. |
 | [Feather Eval](feather-eval/README.md) | Run Feather on Harbor tasks and export trajectories in Harbor's ATIF format. |
 
@@ -48,9 +48,9 @@ their source:
 
 ```toml
 [tool.uv.sources]
-feather-harness = { git = "https://github.com/paper-instruments/feather.git", rev = "<full-commit-sha>", subdirectory = "feather-harness" }
-feather-train = { git = "https://github.com/paper-instruments/feather.git", rev = "<full-commit-sha>", subdirectory = "feather-train" }
-feather-eval = { git = "https://github.com/paper-instruments/feather.git", rev = "<full-commit-sha>", subdirectory = "feather-eval" }
+feather-harness = { git = "https://github.com/paper-instruments/feather-train.git", rev = "<full-commit-sha>", subdirectory = "feather-harness" }
+feather-train = { git = "https://github.com/paper-instruments/feather-train.git", rev = "<full-commit-sha>", subdirectory = "feather-train" }
+feather-eval = { git = "https://github.com/paper-instruments/feather-train.git", rev = "<full-commit-sha>", subdirectory = "feather-eval" }
 ```
 
 Replace `<full-commit-sha>` with the commit you want to consume and run `uv lock`.
