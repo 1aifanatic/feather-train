@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from openai import AsyncOpenAI
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .core.compaction import CompactionConfig
 from .core.messages import FrozenModel
@@ -16,6 +16,7 @@ from .core.model import ChatCompletionsModel, ModelSettings
 from .core.runner import AgentRunError
 from .local import run_local
 from .production import Profile
+from .subagents import SubagentConfig
 from .tools.mcp import McpServerSpec
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,13 @@ class LocalConfig(FrozenModel):
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     mcp_servers: tuple[McpServerSpec, ...] = ()
     skills_dir: Path | None = None
+    subagents: SubagentConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_subagent_profile(self) -> "LocalConfig":
+        if self.subagents is not None and self.profile != "prod":
+            raise ValueError("Subagents are only available in the prod profile")
+        return self
 
 
 async def run(config: LocalConfig, prompt: str) -> int:
@@ -48,6 +56,7 @@ async def run(config: LocalConfig, prompt: str) -> int:
                 skills_dir=config.skills_dir,
                 profile=config.profile,
                 enable_image_tools=config.enable_image_tools,
+                subagents=config.subagents,
             )
         except AgentRunError as exc:
             # Preserve the loop's partial transcript when a model or tool fails.

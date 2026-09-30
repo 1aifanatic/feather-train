@@ -1,6 +1,8 @@
 """Assemble one local Feather run from the shared loop and tools."""
 
 import asyncio
+import json
+import logging
 from pathlib import Path
 
 from ..core.compaction import CompactionConfig
@@ -17,12 +19,17 @@ from ..production import (
 from ..prompt import build_instructions
 from ..scripts.install_skills import install_production_skills, install_skills, install_task_skills
 from ..scripts.save_transcript import save_transcript
+from ..subagents import PARENT_GUIDANCE, AgentSession, SubagentConfig, Subagents
+from ..tools import Tool
+from ..tools.agents import subagent_tools
 from ..tools.files import FileTools
 from ..tools.mcp import McpServerSpec, run_with_mcp
 from ..tools.process import ProcessTools
 from ..tools.todo import TodoList
 from .filesystem import LocalFileRuntime
 from .process import LocalShellRuntime
+
+logger = logging.getLogger(__name__)
 
 
 async def run_local(
@@ -37,13 +44,14 @@ async def run_local(
     skills_dir: Path | None = None,
     profile: Profile = "prod",
     enable_image_tools: bool | None = None,
+    subagents: SubagentConfig | None = None,
 ) -> RunResult:
     validate_profile(profile)
+    if subagents is not None and profile != "prod":
+        raise ValueError("Subagents are only available in the prod profile")
     if enable_image_tools is None:
         enable_image_tools = profile == "prod"
-    file_transport = LocalFileRuntime(workspace)
-    files = FileTools(file_transport, enable_image_reads=profile == "prod" and enable_image_tools)
-    workspace = file_transport.workspace
+    workspace = LocalFileRuntime(workspace).workspace
     # Bundled skills are harness-owned and replaced at every start, so a workspace reused
     # across profiles carries this run's manuals rather than another profile's copies.
     install_skills(workspace, overwrite=True)
@@ -58,22 +66,108 @@ async def run_local(
         compaction = production_compaction(compaction)
     else:
         instructions = build_instructions(skills_root=workspace / ".agents")
+    parent_instructions = instructions
+    if subagents is not None:
+        parent_instructions += (
+            f"\n\n{PARENT_GUIDANCE}\n"
+            f"Limits: {subagents.max_concurrent} concurrently running children, "
+            f"{subagents.max_agents} children total, and {subagents.max_turns} turns per "
+            "child across its lifetime, including follow-ups."
+        )
     request = RunRequest(
         messages=(
-            SystemMessage(content=instructions),
+            SystemMessage(content=parent_instructions),
             UserMessage(content=prompt),
         ),
         max_turns=max_turns,
         model_settings=model_settings,
     )
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        return await _with_local_agent(
+            serve,
+            model=model,
+            workspace=workspace,
+            state_directory=workspace / ".feather/agents" / agent_id,
+            compaction=compaction,
+            mcp_servers=mcp_servers,
+            profile=profile,
+            enable_image_tools=enable_image_tools,
+        )
+
+    async def save_result(agent_id: str, run_number: int, result: RunResult) -> None:
+        await asyncio.to_thread(
+            save_transcript,
+            workspace / ".feather/agents" / agent_id / f"run-{run_number}.json",
+            result.model_dump_json(),
+        )
+
+    agents = (
+        Subagents(
+            run_child,
+            instructions=instructions,
+            config=subagents,
+            model_settings=model_settings,
+            save_result=save_result,
+        )
+        if subagents is not None
+        else None
+    )
+
+    async def run_parent(agent: FeatherAgent) -> RunResult:
+        if agents is None:
+            return await agent.run(request)
+        try:
+            async with agents:
+                return await agent.run(request)
+        finally:
+            try:
+                await asyncio.to_thread(
+                    save_transcript,
+                    workspace / ".feather/agents/manifest.json",
+                    json.dumps(
+                        {"agents": [status.model_dump(mode="json") for status in agents.list()]}
+                    ),
+                )
+            except OSError:
+                logger.warning("Could not save the subagent status manifest", exc_info=True)
+
+    return await _with_local_agent(
+        run_parent,
+        model=model,
+        workspace=workspace,
+        state_directory=workspace / ".feather",
+        compaction=compaction,
+        mcp_servers=mcp_servers,
+        profile=profile,
+        enable_image_tools=enable_image_tools,
+        agents=agents,
+    )
+
+
+async def _with_local_agent(
+    serve: AgentSession,
+    *,
+    model: ChatCompletionsModel,
+    workspace: Path,
+    state_directory: Path,
+    compaction: CompactionConfig,
+    mcp_servers: tuple[McpServerSpec, ...],
+    profile: Profile,
+    enable_image_tools: bool,
+    agents: Subagents | None = None,
+) -> RunResult:
+    file_transport = LocalFileRuntime(workspace)
+    files = FileTools(file_transport, enable_image_reads=profile == "prod" and enable_image_tools)
     todos = TodoList()
 
-    async def publish_transcript(content: str) -> None:
-        await asyncio.to_thread(save_transcript, workspace / ".feather/transcript.jsonl", content)
+    def compaction_state() -> tuple[str, ...]:
+        return (*todos.compaction_state(), *(agents.compaction_state() if agents else ()))
 
-    async with LocalShellRuntime(
-        workspace, log_directory=workspace / ".feather/tasks"
-    ) as transport:
+    async def publish_transcript(content: str) -> None:
+        await asyncio.to_thread(save_transcript, state_directory / "transcript.jsonl", content)
+
+    async with LocalShellRuntime(workspace, log_directory=state_directory / "tasks") as transport:
         processes = ProcessTools(transport)
         builtins = (
             processes.bash_tool(),
@@ -92,17 +186,19 @@ async def run_local(
             builtins = (*builtins, files.view_image_tool())
         if profile == "prod":
             builtins = production_tools(builtins, enable_image_tools=enable_image_tools)
+        if agents is not None:
+            builtins = (*builtins, *subagent_tools(agents))
 
-        async def run(mcp_tools):
+        async def run(mcp_tools: tuple[Tool, ...]) -> RunResult:
             agent = FeatherAgent(
                 model=model,
                 tools=(*mcp_tools, *builtins),
                 compaction=compaction,
-                compaction_tool_state=todos.compaction_state,
+                compaction_tool_state=compaction_state,
                 save_transcript=publish_transcript,
                 response_recovery=profile == "prod",
             )
-            return await agent.run(request)
+            return await serve(agent)
 
         return await run_with_mcp(
             mcp_servers,
