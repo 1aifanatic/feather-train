@@ -67,7 +67,7 @@ def subagent_tools(agents: Subagents) -> tuple[Tool, ...]:
         ),
         _tool(
             "wait_agent",
-            "Return the status and latest report of selected subagents, waiting up to the timeout for any of them to finish. A timeout does not stop them. Wait when you need a result, and do other work in between instead of waiting repeatedly.",
+            "Return the status and latest report of selected subagents. Previously returned completions do not interrupt waiting for the remaining agents. Returns immediately if all selected agents have finished. A timeout does not stop them. Wait when you need a result, and do other work in between instead of waiting repeatedly.",
             WaitArgs,
             wait,
         ),

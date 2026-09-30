@@ -42,8 +42,119 @@ async def test_children_overlap_and_wait_returns_when_only_one_finishes() -> Non
             (first, "completed"),
             (second, "running"),
         ]
-        releases[second].set()
-        assert (await agents.wait((second,), timeout=1))[0].answer == second
+        repeated = asyncio.create_task(agents.wait((first, second), timeout=1))
+        try:
+            await asyncio.sleep(0.01)
+            assert not repeated.done()
+            assert (await agents.wait((first, second), timeout=0))[1].status == "running"
+            releases[second].set()
+            assert (await asyncio.wait_for(repeated, 1))[1].answer == second
+            assert all(
+                s.status == "completed"
+                for s in await asyncio.wait_for(agents.wait((first, second)), 1)
+            )
+        finally:
+            repeated.cancel()
+            await asyncio.gather(repeated, return_exceptions=True)
+
+
+async def test_finished_followup_is_new_even_with_another_child_still_running() -> None:
+    followed_up = asyncio.Event()
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        if agent_id == blocked:
+            await asyncio.Future()
+        model = ScriptedModel(AssistantMessage(content="first"), AssistantMessage(content="second"))
+        return await serve(FeatherAgent(model=model))
+
+    async def save_result(agent_id: str, run_number: int, result: RunResult) -> None:
+        if run_number == 2:
+            followed_up.set()
+
+    blocked = ""
+    async with Subagents(run_child, instructions="test", save_result=save_result) as agents:
+        child = agents.spawn("first assignment").agent_id
+        assert (await agents.wait((child,), timeout=1))[0].answer == "first"
+        blocked = agents.spawn("still working").agent_id
+        agents.followup(child, "second assignment")
+        await asyncio.wait_for(followed_up.wait(), 1)
+        statuses = await asyncio.wait_for(agents.wait((child, blocked), timeout=600), 1)
+        assert statuses[0].answer == "second"
+        assert statuses[1].status == "running"
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["exhausted", "tool-failure"])
+async def test_incomplete_child_reports_observed_work_without_extra_model_calls(fails: bool) -> None:
+    async def invoke(raw: str) -> ToolResult:
+        if fails:
+            raise RuntimeError("save failed")
+        return ToolResult(content="Saved the draft. Revenue is 515.")
+
+    first = work_message()
+    if fails:
+        first = first.model_copy(update={"content": "I will save the draft now."})
+    model = ScriptedModel(first)
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        return await serve(FeatherAgent(model=model, tools=(tool(invoke),)))
+
+    async with Subagents(
+        run_child, instructions="test", config=SubagentConfig(max_turns=1)
+    ) as agents:
+        child = agents.spawn("prepare a draft").agent_id
+        status = (await agents.wait((child,), timeout=1))[0]
+        assert status.status == ("failed" if fails else "exhausted")
+        assert "not a final answer" in status.answer
+        if fails:
+            assert "I will save the draft now." in status.answer
+            assert "may describe intended, not completed work" in status.answer
+            assert "save failed" in status.error
+            assert "Saved the draft" not in status.answer
+        else:
+            assert "Saved the draft. Revenue is 515." in status.answer
+        assert len(model.calls) == 1
+        assert agents.results(child)[0].final_answer == ""
+        with pytest.raises(ValueError, match="completed"):
+            agents.followup(child, "do more work")
+
+
+async def test_partial_report_bounds_tool_text_without_exposing_images_or_compaction() -> None:
+    model = ScriptedModel(
+        work_message().model_copy(update={"reasoning_content": "private reasoning"}),
+        AssistantMessage(content="compaction-only summary"),
+        work_message(),
+        work_message(),
+        tokens=120000,
+    )
+
+    async def invoke(raw: str) -> ToolResult:
+        return ToolResult(content=[
+            {"type": "text", "text": "Observed work: " + "x" * 10000},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,aW1hZ2U="}},
+        ])
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        return await serve(FeatherAgent(
+            model=model,
+            tools=(tool(invoke),),
+            compaction=CompactionConfig(enabled=True, keep_recent_turns=0),
+        ))
+
+    async with Subagents(
+        run_child, instructions="test", config=SubagentConfig(max_turns=3)
+    ) as agents:
+        child = agents.spawn("assignment").agent_id
+        status = (await agents.wait((child,), timeout=1))[0]
+        assert status.status == "exhausted"
+        assert "Observed work:" in status.answer and "[truncated]" in status.answer
+        assert len(status.answer) < 4500
+        assert "private reasoning" not in status.answer
+        assert "compaction-only summary" not in status.answer
+        assert "aW1hZ2U=" not in status.answer
+        result = agents.results(child)[0]
+        assert result.compactions == 1
+        assert "x" * 10000 in result.model_dump_json()
+        assert "aW1hZ2U=" in result.model_dump_json()
 
 
 async def test_wait_timeout_does_not_cancel_child_work() -> None:

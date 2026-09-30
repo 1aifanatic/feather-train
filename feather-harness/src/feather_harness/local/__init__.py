@@ -95,12 +95,14 @@ async def run_local(
             enable_image_tools=enable_image_tools,
         )
 
-    async def save_result(agent_id: str, run_number: int, result: RunResult) -> None:
+    async def save_result(agent_id: str, run_number: int, result: RunResult) -> str:
+        path = workspace / ".feather/agents" / agent_id / f"run-{run_number}.json"
         await asyncio.to_thread(
             save_transcript,
-            workspace / ".feather/agents" / agent_id / f"run-{run_number}.json",
+            path,
             result.model_dump_json(),
         )
+        return str(path)
 
     agents = (
         Subagents(

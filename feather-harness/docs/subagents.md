@@ -25,6 +25,9 @@ tokens. The caller still owns inference timeouts and retry policy.
   It returns as soon as any selected child finishes, waiting up to 120 seconds by default
   and 600 at most, so a long child costs the parent few turns. A timeout does not cancel
   children, and cancelling the parent run still interrupts a wait.
+  A completion already returned by a wait does not interrupt the next wait for remaining
+  children. New follow-up results still return immediately. Zero timeout inspects immediately,
+  and a selection with no remaining work returns immediately even if its reports were seen.
 - `followup_agent(agent_id, prompt)` continues a successfully completed child's own
   context. It does not reset the lifetime turn limit. Running, failed, cancelled,
   exhausted, or explicitly stopped sessions cannot be continued.
@@ -35,6 +38,12 @@ The parent remains responsible for incorporating results. Children cannot delega
 A failed child is reported to the parent without stopping its siblings. Normal parent
 completion, failure, and cancellation all close child sessions; unfinished assignments
 are cancelled, not silently detached to continue spending or editing.
+
+Failed or turn-exhausted activations return a labelled partial execution excerpt, not a
+successful answer. It contains up to four recent assistant/tool text messages, capped at
+1,000 characters each, and the local saved-result path. Tool-only turns can therefore
+surface useful work. Compaction summaries, reasoning fields, and image data are excluded.
+No extra model call or tool execution is made, and the complete saved trace is unchanged.
 
 The existing loop still executes ordinary tools sequentially. Parallelism comes from
 independent child runs, not from concurrently executing every tool in an assistant turn.
@@ -72,6 +81,7 @@ Register `subagent_tools(manager)` on the parent, append `PARENT_GUIDANCE` only 
 those tools are present, and include `manager.compaction_state()` alongside existing
 tool state. Close the manager before closing parent-owned clients. `save_result` can
 persist each activation's `RunResult`; `results(agent_id)` exposes those same records.
+The sink may return a readable result path to include with partial diagnostics, or `None`.
 
 This package does not implement desktop UI, approval dialogs, credential storage,
 cross-process resume, peer messaging, nested teams, or automatic conflict resolution.

@@ -116,6 +116,41 @@ async def test_children_run_shell_commands_concurrently_with_private_prompts_and
         assert list((directory / "tasks").rglob("*.log"))
 
 
+async def test_exhausted_child_exposes_its_saved_trace_without_an_extra_turn(tmp_path: Path) -> None:
+    counts = {"parent": 0, "child": 0}
+    child_id = ""
+    report = ""
+
+    def respond(payload: dict) -> dict:
+        nonlocal child_id, report
+        prompt = _first_prompt(payload)
+        counts[prompt] += 1
+        if prompt == "child":
+            return response(tools=[("write", {"file_path": "draft.txt", "content": "partial work"})])
+        if counts[prompt] == 1:
+            return response(tools=[("spawn_agent", {"prompt": "child"})])
+        if counts[prompt] == 2:
+            child_id = json.loads(_last_outputs(payload)[0])["agent_id"]
+            return response(tools=[("wait_agent", {"agent_ids": [child_id]})])
+        status = json.loads(_last_outputs(payload)[0])[0]
+        assert status["status"] == "exhausted"
+        report = status["answer"]
+        return response("The child left partial work, not a completed deliverable.")
+
+    async with _model(respond) as model:
+        await run_local(
+            "parent", model=model, workspace=tmp_path, subagents=SubagentConfig(max_turns=1)
+        )
+
+    trace_path = tmp_path / ".feather/agents" / child_id / "run-1.json"
+    assert str(trace_path) in report
+    assert "not a final answer" in report and "Tool result" in report
+    assert (tmp_path / "draft.txt").read_text() == "partial work"
+    saved = RunResult.model_validate_json(trace_path.read_text())
+    assert saved.stop_reason == "MaxTurnsExceeded" and saved.final_answer == ""
+    assert counts["child"] == 1
+
+
 async def test_child_followups_keep_their_own_todos_and_read_revisions(tmp_path: Path) -> None:
     (tmp_path / "shared.txt").write_text("before")
     counts = {"parent": 0, "child": 0}

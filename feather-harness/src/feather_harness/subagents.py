@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import Field
 
-from .core.messages import FrozenModel, SystemMessage, UserMessage
+from .core.messages import AssistantMessage, FrozenModel, SystemMessage, ToolMessage, UserMessage
 from .core.model import ModelSettings
 from .core.runner import AgentRunError, FeatherAgent, RunRequest, RunResult
 
@@ -66,7 +66,7 @@ AGENT_TOOL_NAMES = frozenset(
 # The caller keeps its sandbox, model adapter, and task-affine resource ownership.
 AgentSession = Callable[[FeatherAgent], Awaitable[RunResult]]
 ChildRunner = Callable[[str, AgentSession], Awaitable[RunResult]]
-ResultSink = Callable[[str, int, RunResult], Awaitable[None]]
+ResultSink = Callable[[str, int, RunResult], Awaitable[str | None]]
 
 
 class SubagentConfig(FrozenModel):
@@ -89,6 +89,7 @@ class _Child:
     queue: asyncio.Queue[str | None] = field(default_factory=asyncio.Queue)
     done: asyncio.Event = field(default_factory=asyncio.Event)
     status: AgentStatus = field(init=False)
+    reported_status: AgentStatus | None = None
     runs: list[RunResult] = field(default_factory=list)
     task: asyncio.Task[None] | None = None
     stopping: bool = False
@@ -183,15 +184,24 @@ class Subagents:
                 f"Supply agent IDs and a wait timeout between 0 and {WAIT_MAX_SECONDS} seconds"
             )
         children = [self._child(agent_id) for agent_id in agent_ids]
-        if timeout and all(not child.done.is_set() for child in children):
-            waiters = [asyncio.create_task(child.done.wait()) for child in children]
+        pending = [child for child in children if not child.done.is_set()]
+        unreported = any(
+            child.done.is_set() and child.status != child.reported_status for child in children
+        )
+        if timeout and pending and not unreported:
+            waiters = [asyncio.create_task(child.done.wait()) for child in pending]
             try:
                 await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
             finally:
                 for waiter in waiters:
                     waiter.cancel()
                 await asyncio.gather(*waiters, return_exceptions=True)
-        return tuple(child.status for child in children)
+        statuses = tuple(child.status for child in children)
+        # A cancelled wait must not consume a completion the parent never received.
+        for child in children:
+            if child.done.is_set():
+                child.reported_status = child.status
+        return statuses
 
     async def stop(self, agent_id: str) -> AgentStatus:
         child = self._child(agent_id)
@@ -249,8 +259,9 @@ class Subagents:
 
     async def _record(self, child: _Child, result: RunResult) -> None:
         child.runs.append(result)
+        result_path = None
         if self._save_result is not None:
-            await self._save_result(child.agent_id, len(child.runs), result)
+            result_path = await self._save_result(child.agent_id, len(child.runs), result)
         status = "completed" if result.stop_reason == "completed" else "failed"
         if result.stop_reason == "MaxTurnsExceeded":
             status = "exhausted"
@@ -258,7 +269,11 @@ class Subagents:
             agent_id=child.agent_id,
             status=status,
             turns=child.status.turns + result.num_turns,
-            answer=result.final_answer,
+            answer=(
+                result.final_answer
+                if result.stop_reason == "completed"
+                else _partial_report(result, result_path)
+            ),
             error=result.stop_message,
         )
 
@@ -286,6 +301,38 @@ class Subagents:
             raise RuntimeError("Subagents must be used inside its async context")
         if sum(s.status == "running" for s in self.list()) >= self.config.max_concurrent:
             raise ValueError("Subagent concurrency limit reached; wait for an existing child")
+
+
+def _partial_report(result: RunResult, result_path: str | None) -> str:
+    messages = (
+        message
+        for segment in reversed(result.segments)
+        if segment.kind == "execution"
+        for message in reversed(segment.messages)
+    )
+    excerpts = []
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            label = "Assistant text (may describe intended, not completed work)"
+            text = message.content or ""
+        elif isinstance(message, ToolMessage):
+            label = f"Tool result ({message.tool_call_id})"
+            text = message.content
+            if not isinstance(text, str):
+                text = "\n".join(block["text"] for block in text if block["type"] == "text")
+        else:
+            continue
+        if not text.strip():
+            continue
+        # Keep diagnostics small without altering the saved trace or successful reports.
+        excerpts.append(f"{label}:\n{text[:1000]}" + ("\n[truncated]" if len(text) > 1000 else ""))
+        if len(excerpts) == 4:
+            break
+    report = "Incomplete child run. Partial execution excerpt, not a final answer:\n\n"
+    report += "\n\n".join(reversed(excerpts)) or "No execution text was recorded."
+    if result_path is not None:
+        report += f"\n\nFull execution record: {result_path}"
+    return report
 
 
 def _request_stop(child: _Child) -> None:
