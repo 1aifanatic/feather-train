@@ -6,14 +6,14 @@ from collections.abc import Awaitable, Callable
 from pydantic import Field, ValidationError
 
 from ..core.messages import FrozenModel
-from ..subagents import Subagents
+from ..subagents import WAIT_DEFAULT_SECONDS, WAIT_MAX_SECONDS, Subagents
 from . import Tool, ToolResult, ToolSpec, invalid_arguments_result
 
 
 class SpawnArgs(FrozenModel):
     prompt: str = Field(
         min_length=1,
-        description="Self-contained assignment, constraints, and relevant source paths. The child does not see your conversation.",
+        description="Complete brief with the goal, what you know, the relevant sources, the files the subagent may change, and what its report should contain. The subagent does not see your conversation.",
     )
 
 
@@ -28,10 +28,10 @@ class FollowupArgs(AgentArgs):
 class WaitArgs(FrozenModel):
     agent_ids: tuple[str, ...] = Field(min_length=1)
     timeout: float = Field(
-        default=30,
+        default=WAIT_DEFAULT_SECONDS,
         ge=0,
-        le=60,
-        description="Seconds to wait for any selected child; zero inspects immediately. Does not cancel the work.",
+        le=WAIT_MAX_SECONDS,
+        description="Seconds to wait for any selected subagent to finish. Returns as soon as one does, and zero inspects immediately. A timeout does not stop the work.",
     )
 
 
@@ -61,13 +61,13 @@ def subagent_tools(agents: Subagents) -> tuple[Tool, ...]:
     return (
         _tool(
             "spawn_agent",
-            "Start an independent agent in the shared workspace and return its ID immediately. Assign distinct responsibilities, preserve others' edits, and collect results with wait_agent. Children cannot delegate further.",
+            "Start a subagent on a self-contained assignment and return its ID immediately. The subagent works in the shared workspace, sees only the assignment, and cannot delegate further. Collect its report with wait_agent.",
             SpawnArgs,
             spawn,
         ),
         _tool(
             "wait_agent",
-            "Retrieve selected agents' status and latest answers. Wait up to timeout for any running child to finish; a wait timeout does not stop children.",
+            "Return the status and latest report of selected subagents, waiting up to the timeout for any of them to finish. A timeout does not stop them. Wait when you need a result, and do other work in between instead of waiting repeatedly.",
             WaitArgs,
             wait,
         ),

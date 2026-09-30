@@ -58,7 +58,7 @@ async def test_wait_returns_latest_followup_answer_while_list_omits_answers() ->
     "name, arguments, error, feedback",
     [
         ("spawn_agent", '{"prompt":"assignment", "unknown":true}', "invalid_arguments", "unknown"),
-        ("wait_agent", '{"agent_ids":["unknown"], "timeout":61}', "invalid_arguments", "timeout"),
+        ("wait_agent", '{"agent_ids":["unknown"], "timeout":601}', "invalid_arguments", "timeout"),
         ("spawn_agent", '{"prompt":"   "}', "tool_error", "must not be empty"),
         ("wait_agent", '{"agent_ids":["unknown"], "timeout":0}', "tool_error", "Unknown agent"),
     ],

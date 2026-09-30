@@ -259,8 +259,10 @@ async def test_compaction_keeps_parent_agent_state_and_child_transcripts_separat
     assert "## Subagents" not in summaries["child"]
     parent_transcript = (tmp_path / ".feather/transcript.jsonl").read_text()
     child_transcript = next((tmp_path / ".feather/agents").glob("*/transcript.jsonl")).read_text()
-    assert PARENT_GUIDANCE in parent_transcript and CHILD_GUIDANCE not in parent_transcript
-    assert CHILD_GUIDANCE in child_transcript and PARENT_GUIDANCE not in child_transcript
+    # Transcripts are JSON lines, so multi-paragraph guidance appears with escaped newlines.
+    parent_guidance, child_guidance = (json.dumps(text)[1:-1] for text in (PARENT_GUIDANCE, CHILD_GUIDANCE))
+    assert parent_guidance in parent_transcript and child_guidance not in parent_transcript
+    assert child_guidance in child_transcript and parent_guidance not in child_transcript
 
 
 async def test_real_mcp_tools_survive_child_followup_and_close_cleanly(tmp_path, caplog) -> None:

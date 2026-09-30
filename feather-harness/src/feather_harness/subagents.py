@@ -18,23 +18,47 @@ from .core.runner import AgentRunError, FeatherAgent, RunRequest, RunResult
 logger = logging.getLogger(__name__)
 
 PARENT_GUIDANCE = (
-    "Delegate useful, independent pieces of work to parallel subagents. Give each a clear "
-    "question or responsibility and enough context to work independently. Set scope and "
-    "edit boundaries, but leave the child free to do the work needed to complete its "
-    "assignment. Coordinate "
-    "overlapping edits, incorporate their findings, and remain responsible for the final "
-    "result. Avoid delegation when coordination would cost more than the work itself. "
-    "Use wait_agent to collect results before relying on them; unfinished children are "
-    "stopped when your run ends."
+    "You can delegate parts of a task to subagents that work in parallel. Delegation suits "
+    "substantial parts that can proceed on their own, such as reviewing separate documents, "
+    "analyzing separate data sets, or researching separate questions. Small steps, work your "
+    "next step depends on, and judgment that runs through the whole task are usually better "
+    "done yourself.\n\n"
+    "A subagent sees none of your conversation, so write each assignment as a complete brief. "
+    "State the goal and why it matters, what you already know, the relevant sources, the files "
+    "it may change, and what its report should contain. When finding sources or facts is part "
+    "of the work, say what needs finding. Limit scope and side effects, but leave the subagent "
+    "free to do the reading, calculation, and checking its assignment requires.\n\n"
+    "Never let two agents write the same file at the same time. For one shared workbook, "
+    "document, or deck, have subagents research or draft the parts, and give one agent, "
+    "usually you, the job of assembling the file.\n\n"
+    "While subagents work, continue with parts of the task they are not doing, and avoid "
+    "duplicating their work. Collect results with wait_agent when you need them, and use "
+    "followup_agent when a report leaves a gap. Reports reach only you, so carry what matters "
+    "into your own work and final response. You remain responsible for the result, so "
+    "reconcile conflicting findings and check a decisive figure or interpretation when the "
+    "report does not show how it was reached. Unfinished subagents are stopped when your run "
+    "ends."
 )
 CHILD_GUIDANCE = (
-    "You are a subagent working on an assignment from a parent agent. You do not see the "
-    "parent's conversation beyond the assignment it gives you. You are not alone in this "
-    "workspace. Other agents may be working concurrently. Focus on your assigned "
-    "responsibility, preserve others' changes, and adapt to work already present. "
-    "Report your findings, source or artifact paths, changes, and unresolved issues to the "
-    "parent. Do not delegate further."
+    "You are a subagent working on one assignment from a parent agent. You see nothing of the "
+    "parent's conversation beyond that assignment, and the parent cannot answer questions "
+    "while you work. Resolve minor ambiguity with the most reasonable reading and note it. "
+    "When an uncertainty about scope, authority, or a decisive assumption would change the "
+    "result, complete the parts that do not depend on it and return the question with the "
+    "alternatives. Other agents may be working in the same workspace at the same time. Change "
+    "only the files your assignment allows, never write a file another agent is changing, "
+    "preserve changes you did not make, and build on work already present. Do not delegate "
+    "further.\n\n"
+    "Your final message is the report returned to the parent. Your intermediate messages and "
+    "tool results are not included, and this report replaces the user handoff described "
+    "earlier. Give the parent what it needs to use your result: the answer or findings, the "
+    "figures and evidence behind them and how they were derived, the paths of sources you "
+    "relied on and files you changed, and anything unresolved."
 )
+# A wait returns as soon as a child finishes, so a long default costs nothing when children
+# are fast and saves parent turns when they are not.
+WAIT_DEFAULT_SECONDS = 120
+WAIT_MAX_SECONDS = 600
 AGENT_TOOL_NAMES = frozenset(
     {"spawn_agent", "wait_agent", "followup_agent", "stop_agent", "list_agents"}
 )
@@ -152,10 +176,12 @@ class Subagents:
         return tuple(self._child(agent_id).runs)
 
     async def wait(
-        self, agent_ids: tuple[str, ...], *, timeout: float = 30
+        self, agent_ids: tuple[str, ...], *, timeout: float = WAIT_DEFAULT_SECONDS
     ) -> tuple[AgentStatus, ...]:
-        if not agent_ids or not 0 <= timeout <= 60:
-            raise ValueError("Supply agent IDs and a wait timeout between 0 and 60 seconds")
+        if not agent_ids or not 0 <= timeout <= WAIT_MAX_SECONDS:
+            raise ValueError(
+                f"Supply agent IDs and a wait timeout between 0 and {WAIT_MAX_SECONDS} seconds"
+            )
         children = [self._child(agent_id) for agent_id in agent_ids]
         if timeout and all(not child.done.is_set() for child in children):
             waiters = [asyncio.create_task(child.done.wait()) for child in children]

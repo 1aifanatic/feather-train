@@ -75,6 +75,40 @@ async def test_wait_timeout_does_not_cancel_child_work() -> None:
         assert status.answer == "done"
 
 
+async def test_long_wait_yields_to_cancellation_and_to_stop() -> None:
+    started = asyncio.Event()
+
+    async def invoke(raw: str) -> ToolResult:
+        started.set()
+        await asyncio.Event().wait()
+        return ToolResult(content="never")
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        return await serve(
+            FeatherAgent(
+                model=ScriptedModel(work_message(), AssistantMessage(content="done")),
+                tools=(tool(invoke),),
+            )
+        )
+
+    async with Subagents(run_child, instructions="shared instructions") as agents:
+        child = agents.spawn("assignment").agent_id
+        await asyncio.wait_for(started.wait(), 2)
+
+        cancelled = asyncio.create_task(agents.wait((child,), timeout=600))
+        await asyncio.sleep(0.01)
+        cancelled.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(cancelled, 1)
+        assert agents.list()[0].status == "running"
+
+        stopped = asyncio.create_task(agents.wait((child,), timeout=600))
+        await asyncio.sleep(0.01)
+        await agents.stop(child)
+        status = (await asyncio.wait_for(stopped, 1))[0]
+        assert status.status == "cancelled"
+
+
 async def test_child_failure_preserves_its_trace_without_cancelling_sibling() -> None:
     both_started = asyncio.Event()
     fail = asyncio.Event()

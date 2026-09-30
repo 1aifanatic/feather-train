@@ -22,7 +22,9 @@ tokens. The caller still owns inference timeouts and retry policy.
   necessary question, constraints, and source paths. Parent conversation history is
   not automatically copied.
 - `wait_agent(agent_ids, timeout)` returns selected statuses and their latest answers.
-  It waits for any selected child to finish; a timeout does not cancel children.
+  It returns as soon as any selected child finishes, waiting up to 120 seconds by default
+  and 600 at most, so a long child costs the parent few turns. A timeout does not cancel
+  children, and cancelling the parent run still interrupts a wait.
 - `followup_agent(agent_id, prompt)` continues a successfully completed child's own
   context. It does not reset the lifetime turn limit. Running, failed, cancelled,
   exhausted, or explicitly stopped sessions cannot be continued.
@@ -44,8 +46,8 @@ MCP connections, and compaction transcripts. Completed children keep these resou
 until closed, allowing follow-ups to use their own earlier work and background tasks.
 Follow-up uses the active, possibly compacted context, not the expanded archival trace.
 
-The filesystem is shared. Assign distinct files or responsibilities and preserve other
-agents' edits. This is coordination guidance, not an atomic write lock or an OS sandbox.
+The filesystem is shared. Only one agent should write a given file at a time, and each
+preserves other agents' edits. This is coordination guidance, not an atomic write lock or an OS sandbox.
 For a shared workbook or document, parallel research or separate draft fragments are
 usually easier to coordinate than concurrent writes to the same final file.
 
