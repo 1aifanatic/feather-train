@@ -13,7 +13,7 @@ from .local import run_local
 from .local.filesystem import LocalFileRuntime
 from .local.process import LocalShellRuntime
 from .prompt import build_instructions
-from .subagents import AgentStatus, SubagentConfig, Subagents
+from .subagents import AgentStatus, SubagentConfig, Subagents, render_subagent_reports
 from .tools import Tool, ToolResult, ToolSpec
 from .tools.agents import subagent_tools
 from .tools.files import FileTools
@@ -51,5 +51,6 @@ __all__ = [
     "build_instructions",
     "transcript_jsonl",
     "run_local",
+    "render_subagent_reports",
     "subagent_tools",
 ]
