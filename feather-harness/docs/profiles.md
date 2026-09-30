@@ -66,8 +66,7 @@ directory. It installs the complete tree there: the bundled manuals with their r
 the production guidance, `design.md`, and the icons. The guidance names skill files by path,
 so the installer rewrites every `.agents/` reference to `root`. The host then passes the
 same path as `skills_path` to `build_production_instructions`, which rewrites the prompt's
-references and catalog paths to match. The path must not contain whitespace, because the
-guidance uses these paths in shell commands. A host whose image support matches neither
+references and catalog paths to match. A host whose image support matches neither
 standard case, for example a text-only `read` beside its own image tool, supplies its own
 `vision_fact` in place of the enabled or disabled sentence; `host_facts` still describes
 the rest of its environment.

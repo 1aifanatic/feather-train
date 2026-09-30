@@ -55,11 +55,8 @@ def install_production_skill_tree(root: Path) -> None:
 
 def render_skills_path(text: str, skills_path: str) -> str:
     """Point the production guidance's `.agents/` references at the host's skill directory."""
-    # The guidance quotes these paths in shell commands, so a path with whitespace would break.
-    if not skills_path or any(character.isspace() for character in skills_path):
-        raise ValueError(
-            f"Skills path must be non-empty and contain no whitespace: {skills_path!r}"
-        )
+    if not skills_path:
+        raise ValueError("Skills path must be non-empty")
     return text.replace(f"{WORKSPACE_SKILLS_PATH}/", f"{skills_path.rstrip('/')}/")
 
 
