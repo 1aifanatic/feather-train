@@ -8,6 +8,7 @@ from typing import Literal, get_args
 
 from .core.compaction import DEFAULT_COMPACTION_PROMPT, CompactionConfig
 from .prompt import RESOURCE_ROOT, build_instructions
+from .scripts.install_skills import WORKSPACE_SKILLS_PATH, render_skills_path
 from .tools import Tool
 
 Profile = Literal["train", "prod"]
@@ -52,15 +53,25 @@ def build_production_instructions(
     enable_image_tools: bool,
     task_instructions: str | None = None,
     host_facts: str = HOST_FACTS,
+    skills_path: str = WORKSPACE_SKILLS_PATH,
+    vision_fact: str | None = None,
 ) -> str:
-    vision = VISION_ENABLED_FACT if enable_image_tools else VISION_DISABLED_FACT
-    instructions = f"{PRODUCTION_PROMPT}\n\n## Host capabilities\n\n{vision} {host_facts}"
+    """Compose the production prompt for a host.
+
+    `skills_path` is where the host installed the production skills, as written in the prompt.
+    `vision_fact` replaces the image sentence derived from `enable_image_tools` for a host whose
+    image support differs from both standard cases.
+    """
+    if vision_fact is None:
+        vision_fact = VISION_ENABLED_FACT if enable_image_tools else VISION_DISABLED_FACT
+    prompt = render_skills_path(PRODUCTION_PROMPT, skills_path)
+    instructions = f"{prompt}\n\n## Host capabilities\n\n{vision_fact} {host_facts}"
     default_instructions = (RESOURCE_ROOT / "system_prompt.md").read_text().strip()
     if task_instructions and task_instructions.strip() != default_instructions:
         instructions += f"\n\n## Task-specific system instructions\n\n{task_instructions}"
-    return build_instructions(instructions, skills_root=skills_root).replace(
-        TRAIN_CATALOG_HEADING, PRODUCTION_CATALOG_HEADING, 1
-    )
+    return build_instructions(
+        instructions, skills_root=skills_root, skills_path=skills_path
+    ).replace(TRAIN_CATALOG_HEADING, PRODUCTION_CATALOG_HEADING, 1)
 
 
 def production_tools(tools: tuple[Tool, ...], *, enable_image_tools: bool) -> tuple[Tool, ...]:
