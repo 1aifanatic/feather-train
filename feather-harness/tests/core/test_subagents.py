@@ -610,3 +610,35 @@ async def test_a_stop_the_parent_requested_is_not_delivered_back() -> None:
         assert agents.take_unreported() == ()
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(agents.wait_for_unreported(), 0.05)
+
+
+async def test_a_waiting_observer_does_not_receive_a_stop_the_parent_requested() -> None:
+    releases: dict[str, asyncio.Event] = {}
+    async with Subagents(_gated_children(releases, {}), instructions="shared") as agents:
+        child = agents.spawn("assignment").agent_id
+        await asyncio.sleep(0.01)
+        observer = asyncio.create_task(agents.wait_for_unreported())
+        await asyncio.sleep(0)
+
+        await agents.stop(child)
+        await asyncio.sleep(0.01)
+
+        assert not observer.done()
+        assert agents.take_unreported() == ()
+        observer.cancel()
+
+
+async def test_a_failed_report_keeps_the_reason_it_failed() -> None:
+    async def failing(raw: str) -> ToolResult:
+        raise RuntimeError("source.xlsx: permission denied")
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        return await serve(FeatherAgent(model=ScriptedModel(work_message()), tools=(tool(failing),)))
+
+    async with Subagents(run_child, instructions="shared") as agents:
+        agents.spawn("Read source.xlsx")
+        await asyncio.wait_for(agents.wait_for_unreported(), 2)
+        statuses = agents.take_unreported()
+
+        assert statuses[0].status == "failed"
+        assert "source.xlsx: permission denied" in render_subagent_reports(statuses)

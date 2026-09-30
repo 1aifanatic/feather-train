@@ -351,7 +351,7 @@ def render_subagent_reports(statuses: tuple[AgentStatus, ...]) -> str:
     """The parent input that delivers reports which arrived after its last reply."""
     reports = "\n\n".join(
         f'<report agent_id="{status.agent_id}" status="{status.status}">\n'
-        + (status.answer or status.error or "No report was returned.")
+        + _report_body(status)
         + "\n</report>"
         for status in statuses
     )
@@ -364,8 +364,20 @@ def render_subagent_reports(statuses: tuple[AgentStatus, ...]) -> str:
     )
 
 
+def _report_body(status: AgentStatus) -> str:
+    # A failed run's answer is a partial-work excerpt; the reason it failed is separate.
+    parts = [status.answer]
+    if status.status != "completed" and status.error:
+        parts.append(f"Error: {status.error}")
+    return "\n\n".join(part for part in parts if part) or "No report was returned."
+
+
 def _unreported(child: _Child) -> bool:
-    return child.done.is_set() and child.status != child.reported_status
+    # A stopping child settles before stop() marks it reported, so a waiter could wake in
+    # between; the parent asked for the stop and receives its outcome from stop() itself.
+    return (
+        child.done.is_set() and not child.stopping and child.status != child.reported_status
+    )
 
 
 def _partial_report(result: RunResult, result_path: str | None) -> str:
