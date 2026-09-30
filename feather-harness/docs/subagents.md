@@ -11,8 +11,8 @@ agent tools or change instructions unless enabled. The local runner supports it 
 }
 ```
 
-These fields limit simultaneous active assignments, total children created in one
-parent run, and each child's cumulative model turns across follow-ups. They are not
+These fields limit simultaneous active assignments, total children created while the
+manager is open, and each child's cumulative model turns across follow-ups. They are not
 a dollar budget: context length, compaction calls, and provider retries also cost
 tokens. The caller still owns inference timeouts and retry policy.
 
@@ -82,6 +82,30 @@ those tools are present, and include `manager.compaction_state()` alongside exis
 tool state. Close the manager before closing parent-owned clients. `save_result` can
 persist each activation's `RunResult`; `results(agent_id)` exposes those same records.
 The sink may return a readable result path to include with partial diagnostics, or `None`.
+
+## Children that outlive the parent's reply
+
+The local runner closes children when the parent run ends. An application can instead
+keep one `Subagents` manager open across parent runs, so the parent may reply while
+children keep working and continue when their reports arrive. The manager's lifetime is
+the host's `async with` block. Nothing else changes about how children run.
+
+Each finished activation is reported to the parent once. `wait_agent` reports what it
+returns. `take_unreported()` returns every other finished activation and marks it
+reported, `has_unreported()` checks without taking, and `wait_for_unreported()` blocks
+until one exists. A stop the parent asked for
+is not reported back. The host delivers unreported results as the next parent input with
+`render_subagent_reports(statuses)`, which labels them as subagent reports rather than a
+message from the person.
+
+A host that does this should:
+
+- append `BACKGROUND_PARENT_GUIDANCE` instead of `PARENT_GUIDANCE`, so the parent knows
+  it may reply before children finish and that their reports arrive in a later message;
+- take unreported results at the start of every parent run, including runs a new user
+  message starts, and never run two parent runs at once;
+- keep the children's model clients and sandbox processes alive between parent runs,
+  and close the manager when the conversation ends.
 
 This package does not implement desktop UI, approval dialogs, credential storage,
 cross-process resume, peer messaging, nested teams, or automatic conflict resolution.

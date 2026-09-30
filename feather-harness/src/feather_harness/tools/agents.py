@@ -85,7 +85,7 @@ def subagent_tools(agents: Subagents) -> tuple[Tool, ...]:
         ),
         _tool(
             "list_agents",
-            "List this run's children and their status. Use wait_agent for answers. Children are stopped when the parent run ends.",
+            "List your subagents and their status. Use wait_agent for their reports.",
             ListArgs,
             listing,
         ),

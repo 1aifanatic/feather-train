@@ -17,12 +17,15 @@ from .core.runner import AgentRunError, FeatherAgent, RunRequest, RunResult
 
 logger = logging.getLogger(__name__)
 
-PARENT_GUIDANCE = (
-    "You can delegate parts of a task to subagents that work in parallel. Delegation suits "
-    "substantial parts that can proceed on their own, such as reviewing separate documents, "
-    "analyzing separate data sets, or researching separate questions. Small steps, work your "
-    "next step depends on, and judgment that runs through the whole task are usually better "
-    "done yourself.\n\n"
+_GUIDANCE_BODY = (
+    "When a request has two or more substantial parts that can proceed independently, prefer "
+    "delegating suitable parts to subagents in parallel while you work on another part or "
+    "coordinate the results. Examples include reviewing separate large documents, analyzing "
+    "separate datasets, or researching distinct questions. Delegation is most useful when "
+    "each assignment requires meaningful reasoning and tool use. Keep small or tightly "
+    "coupled work with yourself, especially when briefing another agent or rebuilding its "
+    "context would cost more than the parallel work saves. Keep responsibility for the "
+    "overall judgment and final synthesis.\n\n"
     "A subagent sees none of your conversation, so write each assignment as a complete brief. "
     "State the goal and why it matters, what you already know, the relevant sources, the files "
     "it may change, and what its report should contain. When finding sources or facts is part "
@@ -36,8 +39,21 @@ PARENT_GUIDANCE = (
     "followup_agent when a report leaves a gap. Reports reach only you, so carry what matters "
     "into your own work and final response. You remain responsible for the result, so "
     "reconcile conflicting findings and check a decisive figure or interpretation when the "
-    "report does not show how it was reached. Unfinished subagents are stopped when your run "
-    "ends."
+    "report does not show how it was reached. "
+)
+# Hosts that close children with the parent run use this ending.
+PARENT_GUIDANCE = (
+    _GUIDANCE_BODY + "Collect every result you need before you finish, since unfinished "
+    "subagents are stopped when your run ends."
+)
+# Hosts that keep children running after the parent's reply, and deliver their reports as the
+# next parent input, use this ending instead.
+BACKGROUND_PARENT_GUIDANCE = (
+    _GUIDANCE_BODY + "You may end your reply while subagents are still working when the "
+    "remaining work is long and the person benefits from an update now. Say briefly what is "
+    "still running. When a subagent finishes after you reply, its report arrives in a new "
+    "message and you continue the task from there. Never state results you have not received. "
+    "When your next step depends on a result that will arrive soon, wait for it instead."
 )
 CHILD_GUIDANCE = (
     "You are a subagent working on one assignment from a parent agent. You see nothing of the "
@@ -99,11 +115,17 @@ class _Child:
 
 
 class Subagents:
-    """Own children for one parent run; closing waits for their resource cleanup.
+    """Own children while the host keeps the manager open; closing waits for their cleanup.
 
-    ``run_child(id, serve)`` must assemble a fresh agent and await ``serve(agent)``
-    inside that child's resource scopes. Serve retains the same tools across follow-ups.
-    A child is resumable only after successful completion, within this manager's lifetime.
+    The host chooses the lifetime: one parent run, or a whole conversation whose children
+    keep working between parent runs. ``run_child(id, serve)`` must assemble a fresh agent
+    and await ``serve(agent)`` inside that child's resource scopes. Serve retains the same
+    tools across follow-ups. A child is resumable only after successful completion, within
+    this manager's lifetime.
+
+    Each finished activation is reported to the parent once, either by ``wait`` or by
+    ``take_unreported``. A host that outlives parent runs delivers unreported results with
+    ``take_unreported`` and ``render_subagent_reports`` as the next parent input.
     """
 
     def __init__(
@@ -122,10 +144,12 @@ class Subagents:
         self._save_result = save_result
         self._children: dict[str, _Child] = {}
         self._open = False
+        # Set whenever a child settles; waiters clear it before re-checking.
+        self._settled = asyncio.Event()
 
     async def __aenter__(self) -> Subagents:
         if self._open or self._children:
-            raise RuntimeError("Use a new Subagents instance for each parent run")
+            raise RuntimeError("A Subagents instance cannot be reopened")
         self._open = True
         return self
 
@@ -145,7 +169,7 @@ class Subagents:
     def spawn(self, prompt: str) -> AgentStatus:
         self._check_capacity()
         if len(self._children) >= self.config.max_agents:
-            raise ValueError("This parent run has reached its total subagent limit")
+            raise ValueError("The total subagent limit for this session has been reached")
         child = _Child(agent_id=uuid4().hex)
         child.queue.put_nowait(_prompt(prompt))
         self._children[child.agent_id] = child
@@ -185,10 +209,7 @@ class Subagents:
             )
         children = [self._child(agent_id) for agent_id in agent_ids]
         pending = [child for child in children if not child.done.is_set()]
-        unreported = any(
-            child.done.is_set() and child.status != child.reported_status for child in children
-        )
-        if timeout and pending and not unreported:
+        if timeout and pending and not any(_unreported(child) for child in children):
             waiters = [asyncio.create_task(child.done.wait()) for child in pending]
             try:
                 await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
@@ -203,6 +224,23 @@ class Subagents:
                 child.reported_status = child.status
         return statuses
 
+    def has_unreported(self) -> bool:
+        """Whether some finished activation has not been reported to the parent yet."""
+        return any(_unreported(child) for child in self._children.values())
+
+    def take_unreported(self) -> tuple[AgentStatus, ...]:
+        """Return finished activations no wait has returned, and mark them reported."""
+        children = [child for child in self._children.values() if _unreported(child)]
+        for child in children:
+            child.reported_status = child.status
+        return tuple(child.status for child in children)
+
+    async def wait_for_unreported(self) -> None:
+        """Return once some finished activation has not been reported to the parent."""
+        while not self.has_unreported():
+            self._settled.clear()
+            await self._settled.wait()
+
     async def stop(self, agent_id: str) -> AgentStatus:
         child = self._child(agent_id)
         _request_stop(child)
@@ -210,7 +248,9 @@ class Subagents:
             await asyncio.shield(asyncio.gather(child.task, return_exceptions=True))
             if child.status.status == "running":
                 child.status = child.status.model_copy(update={"status": "cancelled"})
-            child.done.set()
+            self._settle(child)
+        # The parent asked for the stop, so the outcome is not delivered back to it.
+        child.reported_status = child.status
         return child.status
 
     def compaction_state(self) -> tuple[str, ...]:
@@ -231,7 +271,7 @@ class Subagents:
             child.status = child.status.model_copy(update={"status": "failed", "error": str(exc)})
             logger.warning("Subagent %s failed: %s", child.agent_id, exc)
         finally:
-            child.done.set()
+            self._settle(child)
 
     async def _serve(self, child: _Child, agent: FeatherAgent) -> RunResult:
         if AGENT_TOOL_NAMES.intersection(agent.tools):
@@ -254,7 +294,7 @@ class Subagents:
             # The flattened audit trace includes history deliberately removed by compaction.
             segment = result.segments[-1]
             context = (*segment.input, *segment.messages)
-            child.done.set()
+            self._settle(child)
         return child.runs[-1]
 
     async def _record(self, child: _Child, result: RunResult) -> None:
@@ -288,19 +328,56 @@ class Subagents:
             # A task cancelled before its first instruction cannot run its own finally.
             if child.status.status == "running":
                 child.status = child.status.model_copy(update={"status": "cancelled"})
-            child.done.set()
+            self._settle(child)
+
+    def _settle(self, child: _Child) -> None:
+        child.done.set()
+        self._settled.set()
 
     def _child(self, agent_id: str) -> _Child:
         try:
             return self._children[agent_id]
         except KeyError:
-            raise ValueError("Unknown agent ID for this parent run") from None
+            raise ValueError("Unknown agent ID for these subagents") from None
 
     def _check_capacity(self) -> None:
         if not self._open:
             raise RuntimeError("Subagents must be used inside its async context")
         if sum(s.status == "running" for s in self.list()) >= self.config.max_concurrent:
             raise ValueError("Subagent concurrency limit reached; wait for an existing child")
+
+
+def render_subagent_reports(statuses: tuple[AgentStatus, ...]) -> str:
+    """The parent input that delivers reports which arrived after its last reply."""
+    reports = "\n\n".join(
+        f'<report agent_id="{status.agent_id}" status="{status.status}">\n'
+        + _report_body(status)
+        + "\n</report>"
+        for status in statuses
+    )
+    return (
+        "<subagent_reports>\n"
+        "These reports arrived from your subagents after your last reply. They are not from the "
+        "person. Continue the task with them.\n\n"
+        f"{reports}\n"
+        "</subagent_reports>"
+    )
+
+
+def _report_body(status: AgentStatus) -> str:
+    # A failed run's answer is a partial-work excerpt; the reason it failed is separate.
+    parts = [status.answer]
+    if status.status != "completed" and status.error:
+        parts.append(f"Error: {status.error}")
+    return "\n\n".join(part for part in parts if part) or "No report was returned."
+
+
+def _unreported(child: _Child) -> bool:
+    # A stopping child settles before stop() marks it reported, so a waiter could wake in
+    # between; the parent asked for the stop and receives its outcome from stop() itself.
+    return (
+        child.done.is_set() and not child.stopping and child.status != child.reported_status
+    )
 
 
 def _partial_report(result: RunResult, result_path: str | None) -> str:

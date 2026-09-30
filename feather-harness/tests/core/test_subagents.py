@@ -5,7 +5,13 @@ import asyncio
 import pytest
 
 from feather_harness import AssistantMessage, CompactionConfig, FeatherAgent, RunResult, ToolResult
-from feather_harness.subagents import AgentSession, SubagentConfig, Subagents
+from feather_harness.subagents import (
+    AgentSession,
+    ChildRunner,
+    SubagentConfig,
+    Subagents,
+    render_subagent_reports,
+)
 from feather_harness.tools.agents import subagent_tools
 
 from ..helpers import ScriptedModel, tool, work_message
@@ -531,3 +537,108 @@ async def test_concurrency_slots_reopen_but_total_child_limit_does_not_reset() -
         assert (await agents.wait((second,), timeout=1))[0].status == "completed"
         with pytest.raises(ValueError, match="total subagent"):
             agents.spawn("cannot create unlimited short-lived agents")
+
+
+def _gated_children(
+    releases: dict[str, asyncio.Event], answers: dict[str, list[str]]
+) -> ChildRunner:
+    """Children that finish each assignment when released, with scripted answers."""
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        async def invoke(raw: str) -> ToolResult:
+            await releases.setdefault(agent_id, asyncio.Event()).wait()
+            releases[agent_id].clear()
+            return ToolResult(content="worked")
+
+        replies = []
+        for answer in answers.setdefault(agent_id, ["done", "followup done"]):
+            replies += [work_message(), AssistantMessage(content=answer)]
+        return await serve(FeatherAgent(model=ScriptedModel(*replies), tools=(tool(invoke),)))
+
+    return run_child
+
+
+async def test_results_the_parent_did_not_collect_are_delivered_once() -> None:
+    releases: dict[str, asyncio.Event] = {}
+    async with Subagents(_gated_children(releases, {}), instructions="shared") as agents:
+        first = agents.spawn("first").agent_id
+        second = agents.spawn("second").agent_id
+        releases.setdefault(first, asyncio.Event()).set()
+
+        await asyncio.wait_for(agents.wait_for_unreported(), 2)
+        assert agents.has_unreported()
+        delivered = agents.take_unreported()
+        assert not agents.has_unreported()
+
+        assert [(s.agent_id, s.status, s.answer) for s in delivered] == [
+            (first, "completed", "done")
+        ]
+        assert agents.take_unreported() == ()
+        message = render_subagent_reports(delivered)
+        assert f'<report agent_id="{first}" status="completed">\ndone\n</report>' in message
+        assert "not from the person" in message
+
+        releases.setdefault(second, asyncio.Event()).set()
+        assert (await agents.wait((first, second), timeout=1))[1].status == "completed"
+        # The parent collected the second report itself, so nothing is left to deliver.
+        assert agents.take_unreported() == ()
+
+
+async def test_a_followup_result_is_delivered_even_after_the_first_was() -> None:
+    releases: dict[str, asyncio.Event] = {}
+    async with Subagents(_gated_children(releases, {}), instructions="shared") as agents:
+        child = agents.spawn("assignment").agent_id
+        releases.setdefault(child, asyncio.Event()).set()
+        await asyncio.wait_for(agents.wait_for_unreported(), 2)
+        assert agents.take_unreported()[0].answer == "done"
+
+        agents.followup(child, "next assignment")
+        releases[child].set()
+        await asyncio.wait_for(agents.wait_for_unreported(), 2)
+
+        assert [s.answer for s in agents.take_unreported()] == ["followup done"]
+
+
+async def test_a_stop_the_parent_requested_is_not_delivered_back() -> None:
+    releases: dict[str, asyncio.Event] = {}
+    async with Subagents(_gated_children(releases, {}), instructions="shared") as agents:
+        child = agents.spawn("assignment").agent_id
+        await asyncio.sleep(0.01)
+
+        assert (await agents.stop(child)).status == "cancelled"
+
+        assert agents.take_unreported() == ()
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(agents.wait_for_unreported(), 0.05)
+
+
+async def test_a_waiting_observer_does_not_receive_a_stop_the_parent_requested() -> None:
+    releases: dict[str, asyncio.Event] = {}
+    async with Subagents(_gated_children(releases, {}), instructions="shared") as agents:
+        child = agents.spawn("assignment").agent_id
+        await asyncio.sleep(0.01)
+        observer = asyncio.create_task(agents.wait_for_unreported())
+        await asyncio.sleep(0)
+
+        await agents.stop(child)
+        await asyncio.sleep(0.01)
+
+        assert not observer.done()
+        assert agents.take_unreported() == ()
+        observer.cancel()
+
+
+async def test_a_failed_report_keeps_the_reason_it_failed() -> None:
+    async def failing(raw: str) -> ToolResult:
+        raise RuntimeError("source.xlsx: permission denied")
+
+    async def run_child(agent_id: str, serve: AgentSession) -> RunResult:
+        return await serve(FeatherAgent(model=ScriptedModel(work_message()), tools=(tool(failing),)))
+
+    async with Subagents(run_child, instructions="shared") as agents:
+        agents.spawn("Read source.xlsx")
+        await asyncio.wait_for(agents.wait_for_unreported(), 2)
+        statuses = agents.take_unreported()
+
+        assert statuses[0].status == "failed"
+        assert "source.xlsx: permission denied" in render_subagent_reports(statuses)
