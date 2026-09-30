@@ -162,7 +162,8 @@ async def test_production_keeps_the_trained_catalog_and_appends_guidance(tmp_pat
 
 
 def test_a_host_owned_skill_tree_serves_every_production_reference(tmp_path: Path) -> None:
-    root = tmp_path / "app" / "skills"
+    # Desktop app data paths contain spaces, such as macOS Application Support.
+    root = tmp_path / "Application Support" / "skills"
     install_production_skill_tree(root)
     instructions = build_production_instructions(
         skills_root=root,
@@ -188,13 +189,6 @@ def test_a_host_owned_skill_tree_serves_every_production_reference(tmp_path: Pat
         for link in re.findall(r"\]\(([^)#]+\.md)(?:#[^)]*)?\)", installed.read_text()):
             if not link.startswith(("https://", "http://")):
                 assert (installed.parent / link).is_file(), (installed, link)
-
-
-def test_production_skill_paths_must_not_contain_whitespace(tmp_path: Path) -> None:
-    root = tmp_path / "Application Support" / "skills"
-    with pytest.raises(ValueError, match="whitespace"):
-        install_production_skill_tree(root)
-    assert not root.exists()
 
 
 def test_icon_recolor_keeps_the_glyph_and_changes_only_its_color(tmp_path: Path) -> None:
