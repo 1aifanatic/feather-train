@@ -26,13 +26,11 @@ import _search  # noqa: E402
 def test_write_fallback_creates_missing_parents(tmp_path, monkeypatch):
     # Windows has no dir_fd/O_NOFOLLOW, so writes take this fallback.
     monkeypatch.setattr(_files, "_supports_safe_relative_write", lambda: False)
-    target = tmp_path / "reports" / "q3" / "summary.txt"
+    target = _files.require_write_target(tmp_path, (), "reports/q3/summary.txt", allow_missing=True)
 
-    _files.write_text(
-        target, "reports/q3/summary.txt", "done", "utf-8", root=tmp_path, create_parents=True
-    )
+    _files.write_text(target, "done", "utf-8", create_parents=True)
 
-    assert target.read_text() == "done"
+    assert (tmp_path / "reports" / "q3" / "summary.txt").read_text() == "done"
 
 
 def test_write_fallback_refuses_targets_outside_the_roots(tmp_path, monkeypatch):
@@ -42,7 +40,8 @@ def test_write_fallback_refuses_targets_outside_the_roots(tmp_path, monkeypatch)
     outside = tmp_path / "outside" / "new" / "file.txt"
 
     with pytest.raises(_files.FileToolError):
-        _files.write_text(outside, str(outside), "x", "utf-8", root=workspace, create_parents=True)
+        target = _files.require_write_target(workspace, (), str(outside), allow_missing=True)
+        _files.write_text(target, "x", "utf-8", create_parents=True)
 
     assert not (tmp_path / "outside").exists()
 
@@ -133,7 +132,7 @@ def test_safe_write_rejects_symlinks_swapped_in_after_validation(tmp_path, swap_
     outside.mkdir()
     protected = outside / "notes.txt"
     protected.write_text("protected")
-    candidate, display, _ = _files.require_path(workspace, (), str(target), for_write=True)
+    validated = _files.require_write_target(workspace, (), str(target))
     target.unlink()
     if swap_parent:
         parent.rmdir()
@@ -141,10 +140,49 @@ def test_safe_write_rejects_symlinks_swapped_in_after_validation(tmp_path, swap_
     else:
         target.symlink_to(protected)
 
-    with pytest.raises(_files.FileToolError, match="path component changed"):
-        _files.write_text(candidate, display, "replacement", "utf-8", root=workspace)
+    with pytest.raises(_files.FileToolError, match="could not be opened safely"):
+        _files.write_text(validated, "replacement", "utf-8")
 
     assert protected.read_text() == "protected"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_alias_repointed_after_validation_still_writes_the_approved_target(tmp_path):
+    workspace = tmp_path / "workspace"
+    (workspace / "a").mkdir(parents=True)
+    (workspace / "b").mkdir()
+    alias = workspace / "alias"
+    alias.symlink_to(workspace / "a", target_is_directory=True)
+    validated = _files.require_write_target(workspace, (), "alias/new.txt", allow_missing=True)
+    alias.unlink()
+    alias.symlink_to(workspace / "b", target_is_directory=True)
+
+    _files.write_text(validated, "x", "utf-8")
+
+    assert (workspace / "a" / "new.txt").read_text() == "x"
+    assert not (workspace / "b" / "new.txt").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_write_fallback_follows_allowed_links_but_refuses_links_swapped_in(tmp_path, monkeypatch):
+    monkeypatch.setattr(_files, "_supports_safe_relative_write", lambda: False)
+    workspace = tmp_path / "workspace"
+    (workspace / "real").mkdir(parents=True)
+    (workspace / "link").symlink_to(workspace / "real", target_is_directory=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    allowed = _files.require_write_target(workspace, (), "link/new.txt", allow_missing=True)
+    _files.write_text(allowed, "hi", "utf-8")
+    assert (workspace / "real" / "new.txt").read_text() == "hi"
+
+    swapped = _files.require_write_target(workspace, (), "real/later.txt", allow_missing=True)
+    (workspace / "real" / "new.txt").unlink()
+    (workspace / "real").rmdir()
+    (workspace / "real").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(_files.FileToolError, match="could not be opened safely"):
+        _files.write_text(swapped, "x", "utf-8")
+    assert list(outside.iterdir()) == []
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows Git Bash paths")

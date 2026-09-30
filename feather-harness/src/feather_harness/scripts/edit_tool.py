@@ -6,6 +6,7 @@ from bisect import bisect_left
 from collections.abc import Iterable, Iterator
 from io import StringIO
 from itertools import chain
+from pathlib import Path
 
 from _files import (
     FileToolError,
@@ -13,7 +14,7 @@ from _files import (
     load_text,
     main,
     require_current_read,
-    require_file,
+    require_write_target,
     validate_write_extension,
     write_text,
 )
@@ -24,16 +25,16 @@ def edit(payload):
     old_string = args["old_string"]
     new_string = args["new_string"]
     replace_all = args["replace_all"]
-    path, display, metadata = require_file(
+    target = require_write_target(
         payload["workspace"],
         payload["read_grants"],
         args["file_path"],
         write_grants=payload["write_grants"],
-        for_write=True,
     )
-    validate_write_extension(path, display)
+    display = target.display
+    validate_write_extension(Path(display), display)
     expected = require_current_read(args["revisions"], display)
-    content, encoding, revision = load_text(path, display, metadata)
+    content, encoding, revision = load_text(target.path, display, target.metadata)
     check_revision(display, expected, revision)
     occurrences = _find_occurrences(content, old_string)
     first = next(occurrences, None)
@@ -55,14 +56,7 @@ def edit(payload):
         _require_unique_match(first_line, occurrences, display)
         updated = content[:first_start] + new_string + content[first_end:]
         replacement_count = 1
-    new_revision = write_text(
-        path,
-        display,
-        updated,
-        encoding,
-        root=payload["workspace"],
-        write_grants=payload["write_grants"],
-    )
+    new_revision = write_text(target, updated, encoding)
 
     start_line = max(1, first_line - 4)
     end_line = first_line + 4 + new_string.count("\n")
