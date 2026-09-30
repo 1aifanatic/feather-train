@@ -58,7 +58,19 @@ carries the current run's files, and user edits to these harness-owned files are
 preserved. Installation still refuses symlinked skill paths. Task skills from
 `skills_dir` are copied afterwards and still refuse to replace installed content.
 Hosts that assemble Feather without `run_local` must install the matching profile's
-skills in each task workspace at startup.
+skills in each task workspace at startup, or keep them in a directory they own.
+
+A host that keeps skills outside the task workspace, such as a desktop app that must not
+write into a user's project, calls `install_production_skill_tree(root)` with an absolute
+directory. It installs the complete tree there: the bundled manuals with their references,
+the production guidance, `design.md`, and the icons. The guidance names skill files by path,
+so the installer rewrites every `.agents/` reference to `root`. The host then passes the
+same path as `skills_path` to `build_production_instructions`, which rewrites the prompt's
+references and catalog paths to match. The path must not contain whitespace, because the
+guidance uses these paths in shell commands. A host whose image support matches neither
+standard case, for example a text-only `read` beside its own image tool, supplies its own
+`vision_fact` in place of the enabled or disabled sentence; `host_facts` still describes
+the rest of its environment.
 
 Native Feather Train E2B evals accept `profile: prod` in `env_args`; their
 training-compatible default remains `train`. The E2B runtime archive carries the
