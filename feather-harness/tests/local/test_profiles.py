@@ -20,10 +20,12 @@ from feather_harness.production import (
     PRODUCTION_TOOL_DESCRIPTIONS,
     VISION_DISABLED_FACT,
     VISION_ENABLED_FACT,
+    build_production_instructions,
 )
 from feather_harness.prompt import RESOURCE_ROOT, build_instructions
 from feather_harness.scripts.install_skills import (
     BUNDLE_ROOT,
+    install_production_skill_tree,
     install_production_skills,
     install_skills,
 )
@@ -157,6 +159,36 @@ async def test_production_keeps_the_trained_catalog_and_appends_guidance(tmp_pat
     guidance += [path.read_text() for path in (BUNDLE_ROOT / "production_skills").glob("*.md")]
     for path in {path for text in guidance for path in re.findall(r"`(\.agents/[^`]+)`", text)}:
         assert (tmp_path / path).is_file(), path
+
+
+def test_a_host_owned_skill_tree_serves_every_production_reference(tmp_path: Path) -> None:
+    # Desktop app data paths contain spaces, such as macOS Application Support.
+    root = tmp_path / "Application Support" / "skills"
+    install_production_skill_tree(root)
+    instructions = build_production_instructions(
+        skills_root=root,
+        enable_image_tools=False,
+        skills_path=root.as_posix(),
+        vision_fact="The view_image tool describes images.",
+    )
+
+    guidance = [instructions, *(path.read_text() for path in root.rglob("*.md"))]
+    assert not any(".agents/" in text for text in guidance)
+    pattern = re.escape(root.as_posix()) + r"/[\w./-]+"
+    referenced = {path.rstrip(".") for text in guidance for path in re.findall(pattern, text)}
+    assert f"{root.as_posix()}/icons/recolor.py" in referenced
+    for path in referenced:
+        assert Path(path).is_file(), path
+    assert f"(file: {root.as_posix()}/docx/SKILL.md)" in instructions
+    assert "The view_image tool describes images." in instructions
+    assert VISION_DISABLED_FACT not in instructions
+    for name in FORMATS:
+        installed = root / name / "SKILL.md"
+        manual = (BUNDLE_ROOT / "skills" / name / "SKILL.md").read_text()
+        assert installed.read_text().startswith(manual.rstrip("\n"))
+        for link in re.findall(r"\]\(([^)#]+\.md)(?:#[^)]*)?\)", installed.read_text()):
+            if not link.startswith(("https://", "http://")):
+                assert (installed.parent / link).is_file(), (installed, link)
 
 
 def test_icon_recolor_keeps_the_glyph_and_changes_only_its_color(tmp_path: Path) -> None:
