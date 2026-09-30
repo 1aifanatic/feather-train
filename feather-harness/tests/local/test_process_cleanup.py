@@ -1,10 +1,15 @@
 import asyncio
 import json
+import os
 import shlex
+import signal
 import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import feather_harness
 from feather_harness import LocalShellRuntime, ProcessTools
 
 
@@ -117,11 +122,10 @@ async def test_stop_waits_for_deadline_cleanup_already_in_progress(process_tools
 async def test_repeated_cancellation_waits_for_cleanup(tmp_path):
     ready = tmp_path / "ready"
     terminating = tmp_path / "terminating"
-    leaked = tmp_path / "leaked"
     command = python(
-        "import signal,time; from pathlib import Path; "
+        "import os,signal,time; from pathlib import Path; "
         f"signal.signal(signal.SIGTERM, lambda *_: Path({str(terminating)!r}).touch()); "
-        f"Path({str(ready)!r}).touch(); time.sleep(1); Path({str(leaked)!r}).touch()"
+        f"Path({str(ready)!r}).write_text(str(os.getpid())); time.sleep(30)"
     )
 
     async def run():
@@ -141,21 +145,52 @@ async def test_repeated_cancellation_waits_for_cleanup(tmp_path):
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
+            with pytest.raises(ProcessLookupError):
+                os.kill(int(ready.read_text()), 0)
     finally:
         if not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-    await asyncio.sleep(0.6)
-    assert not leaked.exists()
+
+
+async def test_termination_grace_includes_process_discovery_time(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(feather_harness.__file__).parent / "scripts"))
+    import process_worker
+
+    elapsed = 0.0
+    signals = []
+
+    async def managed_groups(group: int, token: str) -> set[int]:
+        nonlocal elapsed
+        elapsed += 0.2
+        return {group}
+
+    async def sleep(delay: float) -> None:
+        nonlocal elapsed
+        elapsed += delay
+
+    monkeypatch.setattr(process_worker, "managed_groups", managed_groups)
+    monkeypatch.setattr(
+        process_worker, "signal_groups", lambda groups, sig: signals.append((sig, elapsed))
+    )
+    monkeypatch.setattr(
+        process_worker,
+        "asyncio",
+        SimpleNamespace(
+            get_running_loop=lambda: SimpleNamespace(time=lambda: elapsed), sleep=sleep
+        ),
+    )
+
+    await process_worker.terminate(123, "ownership-token")
+
+    assert [sig for sig, _ in signals] == [signal.SIGTERM, signal.SIGKILL]
+    assert signals[-1][1] - signals[0][1] < 1
 
 
 @pytest.mark.skipif(
     sys.platform != "linux", reason="Reproduces a detached Linux child retaining stdout"
 )
 async def test_unowned_child_cannot_hang_deadline_cleanup(tmp_path, capfd):
-    import os
-    import signal
-
     pid_file = tmp_path / "detached.pid"
     try:
         async with asyncio.timeout(6):
