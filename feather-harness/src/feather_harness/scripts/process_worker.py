@@ -363,12 +363,14 @@ async def managed_groups(group: int, token: str) -> set[int]:
 async def terminate(group: int, token: str) -> None:
     groups = await managed_groups(group, token)
     signal_groups(groups, signal.SIGTERM)
-    # Match the existing half-second grace period, then stop stubborn descendants.
-    for _ in range(10):
+    # Process-discovery time counts toward the half-second grace period.
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 0.5
+    while loop.time() < deadline:
         groups = await managed_groups(group, token)
         if not groups:
             return
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(min(0.05, max(0, deadline - loop.time())))
     signal_groups(await managed_groups(group, token), signal.SIGKILL)
 
 

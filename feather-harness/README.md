@@ -94,6 +94,13 @@ Feather installs bundled skills under `.agents` and saves shell logs under
 `.feather/tasks` in the workspace. `skills_dir` copies task-provided skills after
 bundled installation. MCP connections support HTTP/SSE and stdio transports.
 
+Parallel subagents are opt-in for `prod`. Add `"subagents": {"max_concurrent": 3,
+"max_agents": 8, "max_turns": 50}` to JSON config, or pass a `SubagentConfig` to
+`run_local`. Children share the workspace but have separate context, tools, and logs.
+The parent can start children, wait for results, send follow-ups, and stop them.
+Existing configurations remain unchanged. See [subagents](docs/subagents.md) for
+lifecycle limits and application integration.
+
 ## Execution traces
 
 The CLI writes `RunResult` JSON to stdout. It records execution and compaction

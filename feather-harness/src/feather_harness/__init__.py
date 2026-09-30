@@ -13,7 +13,9 @@ from .local import run_local
 from .local.filesystem import LocalFileRuntime
 from .local.process import LocalShellRuntime
 from .prompt import build_instructions
+from .subagents import AgentStatus, SubagentConfig, Subagents
 from .tools import Tool, ToolResult, ToolSpec
+from .tools.agents import subagent_tools
 from .tools.files import FileTools
 from .tools.mcp import McpServerSpec, run_with_mcp
 from .tools.process import ProcessTools
@@ -21,6 +23,7 @@ from .tools.todo import TodoList
 
 __all__ = [
     "AgentRunError",
+    "AgentStatus",
     "AssistantMessage",
     "ChatCompletionsModel",
     "CompactionConfig",
@@ -36,6 +39,8 @@ __all__ = [
     "RunResult",
     "TraceSegment",
     "SystemMessage",
+    "SubagentConfig",
+    "Subagents",
     "TodoList",
     "Tool",
     "ToolCall",
@@ -46,4 +51,5 @@ __all__ = [
     "build_instructions",
     "transcript_jsonl",
     "run_local",
+    "subagent_tools",
 ]
