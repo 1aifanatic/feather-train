@@ -92,7 +92,8 @@ the host's `async with` block. Nothing else changes about how children run.
 
 Each finished activation is reported to the parent once. `wait_agent` reports what it
 returns. `take_unreported()` returns every other finished activation and marks it
-reported, and `wait_for_unreported()` blocks until one exists. A stop the parent asked for
+reported, `has_unreported()` checks without taking, and `wait_for_unreported()` blocks
+until one exists. A stop the parent asked for
 is not reported back. The host delivers unreported results as the next parent input with
 `render_subagent_reports(statuses)`, which labels them as subagent reports rather than a
 message from the person.

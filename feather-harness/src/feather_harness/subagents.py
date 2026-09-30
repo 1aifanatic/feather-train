@@ -224,6 +224,10 @@ class Subagents:
                 child.reported_status = child.status
         return statuses
 
+    def has_unreported(self) -> bool:
+        """Whether some finished activation has not been reported to the parent yet."""
+        return any(_unreported(child) for child in self._children.values())
+
     def take_unreported(self) -> tuple[AgentStatus, ...]:
         """Return finished activations no wait has returned, and mark them reported."""
         children = [child for child in self._children.values() if _unreported(child)]
@@ -233,7 +237,7 @@ class Subagents:
 
     async def wait_for_unreported(self) -> None:
         """Return once some finished activation has not been reported to the parent."""
-        while not any(_unreported(child) for child in self._children.values()):
+        while not self.has_unreported():
             self._settled.clear()
             await self._settled.wait()
 

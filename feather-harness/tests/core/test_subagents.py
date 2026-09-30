@@ -566,7 +566,9 @@ async def test_results_the_parent_did_not_collect_are_delivered_once() -> None:
         releases.setdefault(first, asyncio.Event()).set()
 
         await asyncio.wait_for(agents.wait_for_unreported(), 2)
+        assert agents.has_unreported()
         delivered = agents.take_unreported()
+        assert not agents.has_unreported()
 
         assert [(s.agent_id, s.status, s.answer) for s in delivered] == [
             (first, "completed", "done")
