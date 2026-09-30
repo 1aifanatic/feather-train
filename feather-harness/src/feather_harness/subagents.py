@@ -18,11 +18,14 @@ from .core.runner import AgentRunError, FeatherAgent, RunRequest, RunResult
 logger = logging.getLogger(__name__)
 
 PARENT_GUIDANCE = (
-    "You can delegate parts of a task to subagents that work in parallel. Delegation suits "
-    "substantial parts that can proceed on their own, such as reviewing separate documents, "
-    "analyzing separate data sets, or researching separate questions. Small steps, work your "
-    "next step depends on, and judgment that runs through the whole task are usually better "
-    "done yourself.\n\n"
+    "When a request has two or more substantial parts that can proceed independently, prefer "
+    "delegating suitable parts to subagents in parallel while you work on another part or "
+    "coordinate the results. Examples include reviewing separate large documents, analyzing "
+    "separate datasets, or researching distinct questions. Delegation is most useful when "
+    "each assignment requires meaningful reasoning and tool use. Keep small or tightly "
+    "coupled work with yourself, especially when briefing another agent or rebuilding its "
+    "context would cost more than the parallel work saves. Keep responsibility for the "
+    "overall judgment and final synthesis.\n\n"
     "A subagent sees none of your conversation, so write each assignment as a complete brief. "
     "State the goal and why it matters, what you already know, the relevant sources, the files "
     "it may change, and what its report should contain. When finding sources or facts is part "
