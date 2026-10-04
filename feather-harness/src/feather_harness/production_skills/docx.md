@@ -15,7 +15,7 @@ An existing document carries its page setup and section breaks, attached templat
 
 ### Document architecture
 
-Match structure to the reading mode. For example:
+Match a new document's structure to its reading mode, and keep an existing document's structure outside the requested change. For example:
 
 - A memo or briefing leads with its answer or recommendation, then gives the reasoning, the material risks or conditions, and the action needed.
 - A report gives its answer early, orders its sections logically, and keeps exhibits near the discussion.
@@ -27,11 +27,11 @@ Match structure to the reading mode. For example:
 
 Understand what the user is asking for and produce that work product carefully, without overengineering it or adding more than it needs.
 
-Use built-in heading styles in a logical hierarchy, and simple headered tables without nested, merged, or split structures where possible, because styles make navigation, tables of contents, and controlled reformatting reliable. Do not break a document meant to be read linearly into slide-like cards. Legal documents follow the conventions of their genre and any supplied template: defined terms, numbered clauses, and established citation form take precedence over the house style.
+In a new document, use built-in heading styles in a logical hierarchy, and simple headered tables without nested, merged, or split structures where possible, because styles make navigation, tables of contents, and controlled reformatting reliable. Do not break a document meant to be read linearly into slide-like cards. Legal documents follow the conventions of their genre and any supplied template: defined terms, numbered clauses, and established citation form take precedence over the house style.
 
 ### Building a net-new document
 
-Professional writing is short. For example, a document answering a bounded question usually runs two to four pages and gives its answer at the start, and the rest carries only what a reader needs to act on it. A length the user gives is a hard ceiling. Plan the document to fit before drafting: allot each section its share of the pages, draft to those allotments, and cut at the outline stage, keeping type at the house sizes.
+Professional writing is short. A document answering a bounded question gives its answer at the start, and the rest carries only what a reader needs to act on it. A length the user gives is a hard ceiling. Plan the document to fit that length before drafting, keeping type at the house sizes.
 
 Define named styles for the title, headings, body, and block quotations before writing, set 1-inch margins, and apply all formatting through those styles. One typeface covers every style, including the title, headings, headers, and footers. All text is black. Headings are bold, with at most two levels, and the document has no colored text, shaded boxes, or fills.
 
@@ -39,7 +39,7 @@ Reasoning is written as paragraphs. Separate paragraphs with a first-line indent
 
 Respect the style and format conventions of the requested work product, or those the user specifies. For example, a memo opens with a To, From, Date, and Re block, set as bold labels with tabbed values between two thin rules, with a privilege or confidentiality legend above it when the genre calls for one, and meeting notes open with the meeting's name, date, and attendees before the decisions and actions. In a multi-page document the footer carries the page number, long citations go in footnotes, exhibits are titled "Exhibit N:" with a message title and a source line beneath, and tables use light horizontal rules and a repeating header row.
 
-Quote supplied text of more than a line as a block indented on both sides, without quotation marks or shading. Proposed language is set the same way under a short label on its own line naming it as a proposal. These blocks keep the body type size and are left-aligned, never justified. When a proposal changes supplied text, show the change as a tracked revision, or with insertions underlined and deletions struck through.
+Quote supplied text of more than a line as a block indented on both sides, without quotation marks or shading. Proposed language is set the same way under a short label on its own line naming it as a proposal. These blocks keep the body type size and are left-aligned, never justified. When a proposal changes supplied text, show the change as a tracked revision, or with insertions underlined and deletions struck through, unless the user asks for another review format such as comments or clean replacement text.
 
 ### Common traps
 
@@ -55,7 +55,7 @@ Quote supplied text of more than a line as a block indented on both sides, witho
 
 ### Visual review
 
-When pagination or layout matters and rendering is available, view the affected pages for a scoped edit. For a new or globally changed document, review a page overview, then inspect detail where it matters at a readable resolution. If the DOCX and an exported PDF are both deliverables, check both. When the user gave a length, count the rendered pages before finishing, and if the document runs over, cut content rather than shrinking type or margins.
+When pagination or layout matters and rendering is available, view the affected pages for a scoped edit. For a new or globally changed document, review a page overview, then inspect detail where it matters at a readable resolution. If the DOCX and an exported PDF are both deliverables, check both. When the user gave a length, count the rendered pages before finishing, and if the document runs over, cut repetition and nonessential content rather than shrinking type or margins.
 
 ### Examples
 
