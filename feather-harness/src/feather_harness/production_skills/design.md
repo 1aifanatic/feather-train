@@ -72,7 +72,7 @@ Rules:
 
 ## Typography
 
-Prefer a familiar sans serif with reliable Office availability and strong numeric forms. Aptos is the default for new Office documents when available, and Arial is the conservative compatibility fallback. Legal memos, opinions, and agreements use Times New Roman at 12 pt, the norm for legal documents. Use a second face only if the supplied template already establishes one or the user requests a more editorial expression. Never depend on an unembedded specialty font for delivery.
+Prefer a familiar sans serif with reliable Office availability and strong numeric forms. Use Arial for new Office documents. Legal memos, opinions, and agreements use Times New Roman at 12 pt, the norm for legal documents. Use a second face only if the supplied template already establishes one or the user requests a more editorial expression. Never depend on an unembedded specialty font for delivery.
 
 General rules:
 
@@ -150,7 +150,6 @@ Write with specificity, natural cadence, and professional restraint.
 
 - Name the actor and action: “Treasury should hold the draw until the covenant model includes the amended add-back,” not “It is recommended that consideration be given to…”
 - Prefer concrete nouns and verbs over abstract strings: “Collections slowed” rather than “a deterioration in collections performance was observed.”
-- The writing rules in the system prompt apply to every word in the artifact, including titles, labels, captions, footers, and speaker notes. That means no em dashes, no middle-dot separators, no clauses joined by semicolons, and complete sentences wherever the text makes a claim.
 - Use fragments only as headings, labels, and table entries.
 - Keep caveats next to the affected claim. Do not repeat a general disclaimer on every page.
 - Do not add “Key takeaways,” “Summary,” and “Conclusion” sections that restate the same three sentences.
