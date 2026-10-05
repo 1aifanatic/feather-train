@@ -28,4 +28,4 @@ Each unresolved problem with the output, error, or figure that shows it, and eac
 ## Next action
 The single next step, stated concretely in a sentence or two and tied to the most recent work. When the deliverables meet the user requirements and their checks have passed, the next action is the final handoff to the user.
 
-Write plain Markdown with no preamble or closing remarks, and do not call tools or continue the work itself.
+Write plain Markdown with no preamble or closing remarks, and do not call tools or continue the task itself.

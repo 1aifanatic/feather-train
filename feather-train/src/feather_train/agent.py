@@ -33,7 +33,7 @@ DEFAULT_TOOLS = (*PROCESS_TOOLS, "read", "edit", "write", "grep", "glob", "todo_
 SUPPORTED_TOOLS = (*DEFAULT_TOOLS, *WEB_TOOL_NAMES)
 E2B_HOST_FACTS = (
     "No live user-interaction, status, or approval channel is available. "
-    "Shell commands run inside an isolated sandbox. "
+    "Shell commands run inside an isolated task sandbox. "
     "Check the environment before relying on a renderer or calculation engine."
 )
 

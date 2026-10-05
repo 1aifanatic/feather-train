@@ -58,7 +58,7 @@ def build_production_instructions(
     instructions = f"{prompt}\n\n## Host capabilities\n\n{vision_fact} {host_facts}"
     default_instructions = (RESOURCE_ROOT / "system_prompt.md").read_text().strip()
     if task_instructions and task_instructions.strip() != default_instructions:
-        instructions += f"\n\n## Additional system instructions\n\n{task_instructions}"
+        instructions += f"\n\n## Task-specific system instructions\n\n{task_instructions}"
     return build_instructions(
         instructions, skills_root=skills_root, skills_path=skills_path
     ).replace(TRAIN_CATALOG_HEADING, PRODUCTION_CATALOG_HEADING, 1)

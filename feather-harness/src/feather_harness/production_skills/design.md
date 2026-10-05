@@ -182,7 +182,7 @@ Put units in the title, subtitle, axis, column header, or a nearby note rather t
 
 Use unambiguous dates: `27 September 2026` or `September 27, 2026` in narrative, following audience convention; ISO `2026-09-27` where sorting, interchange, or international ambiguity matters; `Sep 2026` for months; `Q3 2026` or `FY2026 Q3`, consistent with the entity's fiscal calendar; and an en dash for ranges such as `Jan–Sep 2026`. Label actual, forecast, budget, run-rate, LTM, YTD, and as-of dates explicitly. A chart spanning historical and forecast periods should mark the boundary in position, line treatment, or annotation as well as color.
 
-Source notes should be specific enough to retrieve the evidence: document/system name, relevant record or table, reporting/as-of date, and link or identifier where allowed. “Source: company data” is insufficient when several files or cuts exist. Place a short source directly under a chart/table or in its defined source field. Put long citations in footnotes, comments, or a source register and use stable short references in the body. Do not create a bibliography appendix unless the request or number of sources warrants it.
+Source notes should be specific enough to retrieve the evidence: document/system name, relevant record or table, reporting/as-of date, and link or identifier where allowed. “Source: company data” is insufficient when several files or cuts exist. Place a short source directly under a chart/table or in its defined source field. Put long citations in footnotes, comments, or a source register and use stable short references in the body. Do not create a bibliography appendix unless the task or number of sources warrants it.
 
 ## Tables
 
