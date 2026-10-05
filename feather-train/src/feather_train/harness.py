@@ -56,6 +56,8 @@ class FeatherHarnessConfig(vf.HarnessConfig):
     id: Literal["feather_train"] = "feather_train"
     profile: Profile = "train"
     enable_image_tools: bool = False
+    # Defaults to enable_image_tools; false keeps MCP images while read stays text-only.
+    enable_image_reads: bool | None = None
     max_turns: int = Field(default=250, ge=1)
     sandbox_timeout_minutes: int = Field(default=180, gt=0)
     sandbox_start_max_attempts: int = Field(default=3, ge=1)
@@ -75,11 +77,12 @@ class FeatherHarnessConfig(vf.HarnessConfig):
     @model_validator(mode="after")
     def supported_tools(self) -> Self:
         validate_tool_selection(self.tools)
+        if self.enable_image_reads and not self.enable_image_tools:
+            raise ValueError("enable_image_reads requires enable_image_tools")
         return self
 
     def tools_for_task(self, *, requires_web_search: bool) -> tuple[str, ...]:
-        excluded = WEB_TOOL_NAMES if self.enable_image_tools else (*WEB_TOOL_NAMES, "view_image")
-        tools = tuple(name for name in self.tools if name not in excluded)
+        tools = tuple(name for name in self.tools if name not in WEB_TOOL_NAMES)
         return (*tools, *WEB_TOOL_NAMES) if requires_web_search else tools
 
 
@@ -297,6 +300,7 @@ class FeatherHarness(vf.Harness[FeatherHarnessConfig]):
                             max_turns=self.config.max_turns,
                             model_settings=_model_settings_from_sampling(ctx.sampling),
                             enable_image_tools=self.config.enable_image_tools,
+                            enable_image_reads=self.config.enable_image_reads,
                             profile=self.config.profile,
                             compaction=self.config.compaction,
                             mcp_servers=tuple(servers),

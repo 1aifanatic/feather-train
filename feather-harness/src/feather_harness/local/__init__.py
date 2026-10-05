@@ -160,7 +160,7 @@ async def _with_local_agent(
     agents: Subagents | None = None,
 ) -> RunResult:
     file_transport = LocalFileRuntime(workspace)
-    files = FileTools(file_transport, enable_image_reads=profile == "prod" and enable_image_tools)
+    files = FileTools(file_transport, enable_image_reads=enable_image_tools)
     todos = TodoList()
 
     def compaction_state() -> tuple[str, ...]:
@@ -184,10 +184,8 @@ async def _with_local_agent(
             todos.tool(),
         )
 
-        if enable_image_tools:
-            builtins = (*builtins, files.view_image_tool())
         if profile == "prod":
-            builtins = production_tools(builtins, enable_image_tools=enable_image_tools)
+            builtins = production_tools(builtins, image_reads=enable_image_tools)
         if agents is not None:
             builtins = (*builtins, *subagent_tools(agents))
 

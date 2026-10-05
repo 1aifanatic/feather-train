@@ -165,16 +165,19 @@ Linux-specific process tests skip on macOS.
 
 ### Image inspection
 
-`prod` enables `view_image`, image reads, and MCP images by default. Set
+`prod` enables image reads through `read` and MCP images by default. Set
 `enable_image_tools: false` for a text-only endpoint; model names are not used to infer
-capabilities. Supported images are PNG/JPEG/GIF/WebP up to 10 MiB. Audio remains
-unsupported. Render document pages with the document skills when useful before
-inspecting them; installed manuals do not guarantee a working renderer.
+capabilities. `read` accepts PNG/JPEG/GIF/WebP, and converts BMP/TIFF, up to 20 MB of
+input. Like Claude Code and ZCode, it downscales images to at most 2000 px on the longest
+side and re-encodes them to at most 5 MB of base64, telling the model the original and
+displayed sizes. Resizing uses Pillow when the execution environment has it; without
+Pillow, images that need no resizing still pass through. Audio remains unsupported.
+Render document pages to PNG, as the pdf skill describes, before inspecting them.
 
 Native traces retain image data. API requests place images in a labeled user message
 after all parallel tool results, because Chat Completions tool messages accept text
 only. Compaction receives the actual images; unmeasured images provisionally count as
 8192 tokens each until provider usage is available. This estimate is model-dependent,
-not an exact visual-token budget. The existing explicit `enable_image_tools: true`
-override also works in `train` for `view_image` and MCP; training `read(image)` retains
-its historical disabled-vision response.
+not an exact visual-token budget. An explicit `enable_image_tools: true` also
+enables image reads and MCP images in `train`; without it, training `read(image)` keeps
+its disabled-vision response.

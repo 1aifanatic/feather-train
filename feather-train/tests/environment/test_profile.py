@@ -8,7 +8,6 @@ import verifiers.v1 as vf
 from feather_harness import ChatCompletionsModel
 from feather_harness.core.compaction import CompactionConfig
 from feather_harness.production import (
-    IMAGE_READ_GUIDANCE,
     PRODUCTION_COMPACTION_PROMPT,
     PRODUCTION_PROMPT,
     PRODUCTION_TOOL_DESCRIPTIONS,
@@ -81,10 +80,8 @@ async def test_e2b_profile_selects_model_visible_prompt_and_tool_descriptions(pr
         assert "Shell commands run locally with the host's permissions" not in system
         assert "Keep the supplied workbook format." in system
         assert "Tool capability instructions" in system
-        assert read["description"] == PRODUCTION_TOOL_DESCRIPTIONS["read"].replace(
-            IMAGE_READ_GUIDANCE, ""
-        )
-        assert "supported image paths" not in read["description"].lower()
+        assert read["description"] == PRODUCTION_TOOL_DESCRIPTIONS["read_without_images"]
+        assert "image" not in read["description"].lower()
     else:
         assert PRODUCTION_PROMPT not in system
         assert system.startswith("# Agent instructions\n\nKeep the supplied workbook format.")

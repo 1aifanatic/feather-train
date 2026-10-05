@@ -18,7 +18,7 @@ from charset_normalizer import from_bytes
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 MAX_OUTPUT_CHARS = 24000
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
 DOCUMENT_EXTENSIONS = {
     ".doc",
     ".docm",
@@ -386,7 +386,9 @@ def truncate_output_parts(
     return content[:head], "\n\n..." + notice(head, tail) + "...\n\n", content[-tail:]
 
 
-def load_text(path: Path, display: str, metadata: os.stat_result) -> tuple[str, str, str]:
+def load_text(
+    path: Path, display: str, metadata: os.stat_result, *, scope: str = "reads text files"
+) -> tuple[str, str, str]:
     if metadata.st_size > MAX_FILE_SIZE_BYTES:
         raise FileToolError(
             f"File validation failed for {display}: File is too large ({metadata.st_size / 1024 / 1024:.1f}MB). Maximum allowed size is 10MB."
@@ -395,7 +397,7 @@ def load_text(path: Path, display: str, metadata: os.stat_result) -> tuple[str, 
     data = path.read_bytes()
     if _is_binary(data[:1024]):
         raise FileToolError(
-            f"File validation failed for {display}: This tool reads text files only; the file appears to be binary."
+            f"File validation failed for {display}: This tool {scope} only; the file appears to be binary."
         )
     # Short UTF-8 text is easy to misidentify. Guess only if strict decoding fails.
     encoding = "utf-8-sig" if data.startswith(b"\xef\xbb\xbf") else "utf-8"

@@ -36,8 +36,8 @@ JSON also supports `profile` and `enable_image_tools`:
 
 The example disables image tools for a text-only endpoint. An omitted or null
 `enable_image_tools` follows the profile; an explicit boolean wins. No model-name
-heuristic establishes image support. `train` with an explicit image override keeps
-the pre-existing `view_image`/MCP behavior; it does not change `read(image)`.
+heuristic establishes image support. `train` with an explicit image override
+enables image reads and MCP images, as in `prod`.
 
 ## Production skills
 

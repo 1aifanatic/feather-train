@@ -37,16 +37,16 @@ FORMATS = ("docx", "pdf", "pptx", "xlsx")
 
 
 @pytest.mark.parametrize(
-    "options, production, view_image, image_read",
+    "options, production, image_read",
     [
-        ({}, True, True, True),
-        ({"profile": "train"}, False, False, False),
-        ({"profile": "prod", "enable_image_tools": False}, True, False, False),
-        ({"profile": "train", "enable_image_tools": True}, False, True, False),
+        ({}, True, True),
+        ({"profile": "train"}, False, False),
+        ({"profile": "prod", "enable_image_tools": False}, True, False),
+        ({"profile": "train", "enable_image_tools": True}, False, True),
     ],
 )
 async def test_startup_profiles_and_image_overrides_reach_model_requests(
-    tmp_path: Path, options: dict, production: bool, view_image: bool, image_read: bool
+    tmp_path: Path, options: dict, production: bool, image_read: bool
 ) -> None:
     (tmp_path / "page.png").write_bytes(PNG)
     task = "Inspect page.png without changing the supplied task.\n"
@@ -61,15 +61,17 @@ async def test_startup_profiles_and_image_overrides_reach_model_requests(
     if production:
         assert (RESOURCE_ROOT / "production_prompt.md").read_text().strip() in instructions
         assert "## Host capabilities" in instructions
-        assert (VISION_ENABLED_FACT if view_image else VISION_DISABLED_FACT) in instructions
+        assert (VISION_ENABLED_FACT if image_read else VISION_DISABLED_FACT) in instructions
         assert HOST_FACTS in instructions
     else:
         assert instructions == build_instructions()
     tools = {tool["function"]["name"]: tool["function"] for tool in first["tools"]}
-    assert ("view_image" in tools) is view_image
-    assert ("supported image" in tools["read"]["description"]) is image_read
+    assert "view_image" not in tools
+    assert tools["read"]["description"].startswith(
+        "Read a text file or an image." if image_read else "Read a text file with line numbers."
+    )
     assert (
-        "supported image" in tools["read"]["parameters"]["properties"]["file_path"]["description"]
+        "text file or image" in tools["read"]["parameters"]["properties"]["file_path"]["description"]
     ) is image_read
     observation = next(message for message in requests[1]["messages"] if message["role"] == "tool")
     if image_read:
@@ -169,7 +171,7 @@ def test_a_host_owned_skill_tree_serves_every_production_reference(tmp_path: Pat
         skills_root=root,
         enable_image_tools=False,
         skills_path=root.as_posix(),
-        vision_fact="The view_image tool describes images.",
+        vision_fact="A host image service describes images.",
     )
 
     guidance = [instructions, *(path.read_text() for path in root.rglob("*.md"))]
@@ -180,7 +182,7 @@ def test_a_host_owned_skill_tree_serves_every_production_reference(tmp_path: Pat
     for path in referenced:
         assert Path(path).is_file(), path
     assert f"(file: {root.as_posix()}/docx/SKILL.md)" in instructions
-    assert "The view_image tool describes images." in instructions
+    assert "A host image service describes images." in instructions
     assert VISION_DISABLED_FACT not in instructions
     for name in FORMATS:
         installed = root / name / "SKILL.md"

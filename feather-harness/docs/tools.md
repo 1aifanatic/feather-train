@@ -8,12 +8,11 @@ configured MCP tools; web tools are available to library callers.
 
 | Tool | Arguments | Behavior |
 | --- | --- | --- |
-| `read` | `file_path`; `offset=1`; `limit=2000` | Read text with line numbers, starting at a one-based offset. Limit: 1–2000 lines. |
+| `read` | `file_path`; `offset=1`; `limit=2000` | Read text with line numbers, starting at a one-based offset. Limit: 1–2000 lines. With images enabled, also returns images. |
 | `write` | `file_path`; `content` | Create a text file or replace its full contents, creating parent directories as needed. |
 | `edit` | `file_path`; `old_string`; `new_string`; `replace_all=false` | Replace matching text in an existing file. An empty `new_string` deletes it. |
 | `grep` | `pattern`; `path="."`; optional `include`; `limit=100` | Search with a ripgrep-compatible regex; return paths and line numbers. `include` filters filenames in directory searches. |
 | `glob` | `pattern`; `path="."`; `limit=100` | Find files by glob pattern and return sorted paths. |
-| `view_image` | `file_path` | When enabled, inspect a PNG/JPEG/GIF/WebP image up to 10 MiB. |
 
 Paths are relative to the workspace root. Absolute paths are accepted within the
 workspace or explicitly configured grants. File tools check resolved symlink
@@ -41,10 +40,11 @@ Search excludes hidden and ignored files and bounds its output. `grep` and `glob
 accept limits from 1 to 1000. Reading and editing are for text files; edits preserve
 encoding and line endings outside the replacement. New files use UTF-8.
 
-In the default production profile, `read` also returns supported images through the
-same loader as `view_image`. Image reads ignore text line ranges and do not establish
-an editable text revision. Explicit training keeps the disabled-image response from
-`read`. See [profiles](profiles.md) for the image capability override.
+When images are enabled, `read` also returns PNG/JPEG/GIF/WebP images (and converts
+BMP/TIFF), downscaled to at most 2000 px on the longest side and 5 MB of base64. Image
+reads ignore text line ranges and do not establish an editable text revision. With
+images disabled, `read` returns a disabled-vision response for images. See
+[profiles](profiles.md) for the image capability override.
 
 ### Read before modifying
 

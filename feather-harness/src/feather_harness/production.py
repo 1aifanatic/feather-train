@@ -1,7 +1,6 @@
 """Production prose and descriptions; the execution loop is shared with training."""
 
 import json
-from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import Literal, get_args
@@ -21,8 +20,7 @@ PRODUCTION_TOOL_DESCRIPTIONS = json.loads(
     (RESOURCE_ROOT / "production_tool_descriptions.json").read_text()
 )
 VISION_ENABLED_FACT = (
-    "Image inspection is enabled through read and view_image, including source images and "
-    "rendered pages."
+    "Image inspection is enabled through read, including source images and rendered pages."
 )
 VISION_DISABLED_FACT = "Image inspection is disabled in this run; read handles text files only."
 HOST_FACTS = (
@@ -32,14 +30,6 @@ HOST_FACTS = (
 )
 TRAIN_CATALOG_HEADING = "\n\n# Sandbox capability instructions\n\n"
 PRODUCTION_CATALOG_HEADING = "\n\n# Tool capability instructions\n\n"
-IMAGE_READ_GUIDANCE = (
-    "In this run, supported image paths return image content through the image reader "
-    "rather than text; line ranges and text revision tracking do not apply to images. "
-)
-IMAGE_READ_PATH_HELP = (
-    "Path to a text file or supported image inside the workspace. Relative paths resolve from "
-    "the workspace root; absolute in-workspace or explicitly granted paths are also accepted."
-)
 
 
 def validate_profile(profile: Profile) -> None:
@@ -74,22 +64,19 @@ def build_production_instructions(
     ).replace(TRAIN_CATALOG_HEADING, PRODUCTION_CATALOG_HEADING, 1)
 
 
-def production_tools(tools: tuple[Tool, ...], *, enable_image_tools: bool) -> tuple[Tool, ...]:
+def production_tools(tools: tuple[Tool, ...], *, image_reads: bool) -> tuple[Tool, ...]:
+    """Swap in production descriptions; `read` has one for each image-read mode."""
     result = []
     for tool in tools:
-        description = PRODUCTION_TOOL_DESCRIPTIONS.get(tool.spec.name)
+        name = tool.spec.name
+        if name == "read" and not image_reads:
+            name = "read_without_images"
+        description = PRODUCTION_TOOL_DESCRIPTIONS.get(name)
         if description is None:
             result.append(tool)
             continue
-        changes = {"description": description}
-        if tool.spec.name == "read":
-            if enable_image_tools:
-                parameters = deepcopy(tool.spec.parameters)
-                parameters["properties"]["file_path"]["description"] = IMAGE_READ_PATH_HELP
-                changes["parameters"] = parameters
-            else:
-                changes["description"] = description.replace(IMAGE_READ_GUIDANCE, "")
-        result.append(replace(tool, spec=tool.spec.model_copy(update=changes)))
+        update = {"description": description}
+        result.append(replace(tool, spec=tool.spec.model_copy(update=update)))
     return tuple(result)
 
 
