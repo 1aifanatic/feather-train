@@ -32,8 +32,8 @@ PROCESS_TOOLS = ("bash", "task_list", "task_output", "task_stop")
 DEFAULT_TOOLS = (*PROCESS_TOOLS, "read", "edit", "write", "grep", "glob", "todo_write")
 SUPPORTED_TOOLS = (*DEFAULT_TOOLS, *WEB_TOOL_NAMES)
 E2B_HOST_FACTS = (
-    "This is a headless run with no live user-interaction, status, or approval channel. "
-    "Shell commands run inside an isolated task sandbox. "
+    "No live user-interaction, status, or approval channel is available. "
+    "Shell commands run inside an isolated sandbox. "
     "Check the environment before relying on a renderer or calculation engine."
 )
 

@@ -22,9 +22,9 @@ PRODUCTION_TOOL_DESCRIPTIONS = json.loads(
 VISION_ENABLED_FACT = (
     "Image inspection is enabled through read, including source images and rendered pages."
 )
-VISION_DISABLED_FACT = "Image inspection is disabled in this run; read handles text files only."
+VISION_DISABLED_FACT = "Image inspection is not available; read handles text files only."
 HOST_FACTS = (
-    "This is a headless run with no live user-interaction, status, or approval channel. "
+    "No live user-interaction, status, or approval channel is available. "
     "Shell commands run locally with the host's permissions. "
     "Check the environment before relying on a renderer or calculation engine."
 )
@@ -58,7 +58,7 @@ def build_production_instructions(
     instructions = f"{prompt}\n\n## Host capabilities\n\n{vision_fact} {host_facts}"
     default_instructions = (RESOURCE_ROOT / "system_prompt.md").read_text().strip()
     if task_instructions and task_instructions.strip() != default_instructions:
-        instructions += f"\n\n## Task-specific system instructions\n\n{task_instructions}"
+        instructions += f"\n\n## Additional system instructions\n\n{task_instructions}"
     return build_instructions(
         instructions, skills_root=skills_root, skills_path=skills_path
     ).replace(TRAIN_CATALOG_HEADING, PRODUCTION_CATALOG_HEADING, 1)
