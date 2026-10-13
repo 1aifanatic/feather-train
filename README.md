@@ -59,14 +59,23 @@ harness dependency resolves to this repository. Omit packages you do not use.
 Choose Train's `verifiers`, `tinker`, or `training` extra for the integration you
 need. Commit the consumer's lockfile to preserve the resolved revisions.
 
+Source and verification records for the package sync are in
+[Harness parity](docs/plans/harness-train-stack-parity/parity-audit.md) and
+[Train and Eval parity](docs/plans/integration-train-stack-parity/spec.md).
+
 ## Development
 
 From this workspace directory:
 
 ```bash
-uv sync --all-packages --all-extras --locked
+uv sync --all-packages --all-extras --no-extra token-count --locked
 uv build --all-packages
 ```
+
+The optional Harness `token-count` extra uses the GLM image processor's pinned
+Transformers version and cannot share an environment with Train's `training`
+extra. Install it separately with `uv sync --package feather-harness --extra
+token-count --extra dev --locked` when using exact GLM prompt budgets.
 
 The package READMEs contain their test and lint commands. Run their pytest suites
 separately because each has its own configuration. See [AGENTS.md](AGENTS.md) for
