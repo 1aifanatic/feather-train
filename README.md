@@ -9,7 +9,7 @@ with model training.
 
 | Package | Purpose |
 | --- | --- |
-| [Feather Harness](feather-harness/README.md) | **prod:** Agent loop, file and shell tools, Paper document skills, context compaction, and a local CLI with professional guidance and image support.<br>**train:** The same loop and tools with minimal prompts and original skill guidance for training. |
+| [Feather Harness](feather-harness/README.md) | Agent loop, file and shell tools, Paper document skills, context compaction, and a local CLI. Includes two built-in harness profiles: **`prod`** (default), with professional guidance and image support; and **`train`**, with minimal prompts and original skill guidance for training. |
 | [Feather Train](feather-train/README.md) | Rollouts and grading on snapshotted E2B worlds, Braintrust logging, and a reference Tinker training integration through Verifiers. |
 | [Feather Eval](feather-eval/README.md) | Run Feather on Harbor tasks and export trajectories in Harbor's ATIF format. |
 
