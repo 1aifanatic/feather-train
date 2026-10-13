@@ -66,7 +66,7 @@ Harbor agent `kwargs` also accepts `model_settings` (for example `temperature`,
 its CLI configuration; misspelled model and compaction fields fail before
 installation. The task instruction remains the literal user message, while
 `additional_instructions` extends the selected system prompt. See the Harness
-[CLI configuration reference](../feather-harness/README.md#configuration) for the configuration
+[CLI configuration reference](../feather-harness/docs/usage.md#configuration) for the configuration
 fields and token-count dependencies.
 
 ## Task environment
@@ -101,7 +101,8 @@ RUN python -m pip uninstall -y openpyxl python-docx python-pptx \
     && python -m pip install --no-cache-dir --force-reinstall \
        paper-docx==0.2.0 paper-pptx==0.2.0 paper-xlsx==0.2.1 \
        'reportlab>=4,<5' 'pypdf>=6,<7' 'pdfplumber>=0.11,<0.12' \
-       'pdf2image>=1.17,<2' 'Pillow>=10.3,<13' \
+       'pdf2image>=1.17,<2' 'pypdfium2>=5,<6' 'Pillow>=10.3,<13' \
+       'pandas>=2.2,<3' 'requests>=2.32,<3' 'beautifulsoup4>=4.12,<5' 'lxml>=5.3,<7' \
     && paper-docx-doctor && paper-pptx-doctor && paper-xlsx-doctor
 ```
 
@@ -109,7 +110,7 @@ These dependencies match the Harness [`office` extra](../feather-harness/pyproje
 Use a virtualenv for distro-managed Python, and remove distro-installed Office
 packages with the system package manager before this step. Add OCR binaries when
 the task needs them; see the Harness
-[system dependency commands](../feather-harness/README.md#install-and-run).
+[system dependency commands](../feather-harness/README.md#recommended-packages).
 
 Graders sharing the task's Python environment also use Paper.
 

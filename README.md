@@ -32,7 +32,7 @@ FEATHER_SOURCE_DIR="$PWD" bash install.sh
 ```
 
 The installer provisions its own uv and Python 3.12, then installs the CLI, Paper
-document packages, and PDF libraries into a dedicated Feather virtual environment
+document packages, PDF libraries, and data libraries into a dedicated Feather virtual environment
 under `~/.local/share/feather/`. It does not install Python packages into your
 current directory, active environment, or system Python. The launcher at
 `~/.local/bin/feather` sets the execution environment so the model's `python` and
@@ -41,7 +41,7 @@ If `~/.local/bin` is not on your `PATH`, invoke `~/.local/bin/feather` directly 
 add that directory to `PATH` yourself; the installer does not edit shell profiles.
 
 Install ripgrep separately; PDF rendering needs Poppler, and spreadsheet
-recalculation needs LibreOffice. See [Harness setup](feather-harness/README.md#install-and-run)
+recalculation needs LibreOffice. See [Harness setup](feather-harness/README.md#recommended-packages)
 for system packages and installation options. Then run:
 
 ```bash
@@ -64,7 +64,7 @@ To use a project's Python for task commands, pass
 `--python /absolute/path/to/project/.venv/bin/python` or set `python` in the JSON
 configuration. Feather keeps its own runtime environment. Task shell commands
 can use `"$FEATHER_PYTHON"` to access the bundled Paper packages. See
-[task Python selection](feather-harness/README.md#task-python) for examples.
+[task Python selection](feather-harness/docs/usage.md#task-python) for examples.
 
 For evaluation, follow the [Harbor example](feather-eval/README.md#first-run).
 For training, start with [Feather Train](feather-train/README.md): it takes task
