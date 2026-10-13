@@ -20,7 +20,7 @@ PRODUCTION_TOOL_DESCRIPTIONS = json.loads(
     (RESOURCE_ROOT / "production_tool_descriptions.json").read_text()
 )
 VISION_ENABLED_FACT = "Image inspection is enabled through read, including source images and rendered pages."
-VISION_DISABLED_FACT = "Image inspection is disabled in this run; read handles text files only."
+VISION_DISABLED_FACT = "Image inspection is not available; read handles text files only."
 TRAIN_CATALOG_HEADING = "\n\n# Sandbox capability instructions\n\n"
 PRODUCTION_CATALOG_HEADING = "\n\n# Tool capability instructions\n\n"
 
