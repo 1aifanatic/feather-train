@@ -11,12 +11,13 @@ agents:
     override_timeout_sec: 3600
     env:
       OPENAI_API_KEY: ${PAPERINSTRUMENTS_API_KEY}
+      EXA_API_KEY: ${EXA_API_KEY}
     kwargs:
       wheel: dist/feather_harness-0.1.0-py3-none-any.whl
       base_url: https://api.paperinstruments.com/v1
       profile: prod
       enable_image_tools: true
-      enable_web_tools: false
+      enable_web_tools: true
       max_turns: 500
       model_settings:
         temperature: 1.0

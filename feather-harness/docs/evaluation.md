@@ -9,8 +9,8 @@ not a scored benchmark or a test of long-context compaction.
 
 ## Run on Harbor
 
-From the repository root, with Docker running and `PAPERINSTRUMENTS_API_KEY` set to your
-Paper API key:
+From the repository root, with Docker running, `PAPERINSTRUMENTS_API_KEY` set to your
+Paper API key, and `EXA_API_KEY` set for web search and fetch:
 
 ```bash
 uv sync --package feather-eval
@@ -21,6 +21,8 @@ uv run --package feather-eval harbor run --config feather-eval/examples/ultramar
 The YAML maps `PAPERINSTRUMENTS_API_KEY`, matching the
 [API quickstart](https://docs.paperinstruments.com/docs/ultramarine), to the
 `OPENAI_API_KEY` environment variable consumed by the adapter inside the sandbox.
+It also forwards `EXA_API_KEY` for the enabled web tools; the task sandbox needs
+egress to `api.exa.ai`.
 
 Copy the YAML and replace `tasks` with your Harbor task paths, or use `datasets`
 for a dataset directory or registered dataset. Its paths
@@ -68,7 +70,7 @@ Python environment and these packages in addition to the skills' instructions.
 | Profile | `prod` |
 | Temperature / top-p | `1.0` / `0.95` |
 | Reasoning effort | `max` |
-| Image reads / web tools | Enabled / disabled |
+| Image reads / web tools | Enabled / enabled |
 | Harness context budget | 131,072 tokens |
 | Compaction trigger | 101,072 estimated tokens |
 | Recent turns retained | 2 |
