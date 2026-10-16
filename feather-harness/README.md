@@ -38,6 +38,10 @@ This harness contains the prompts we've tuned for internal testing. Start with:
 See [Prompting](https://docs.paperinstruments.com/docs/ultramarine/prompting) in the
 Ultramarine docs for request settings such as reasoning effort and sampling.
 
+For Harbor evaluations, start with the [Ultramarine evaluation reference](docs/evaluation.md)
+and its runnable configuration. It makes compaction, sampling, image tools, and
+task-environment package requirements explicit.
+
 ## How it works
 
 The whole harness is a few small pieces. If you want to rebuild it yourself, these
