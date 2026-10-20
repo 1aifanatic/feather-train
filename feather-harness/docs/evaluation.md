@@ -77,9 +77,10 @@ Python environment and these packages in addition to the skills' instructions.
 | Execution / compaction output ceilings | 131,072 / 131,072 tokens |
 | Turn limit | 500 |
 
-Compaction must be enabled explicitly in Harbor, the CLI, and `run_local`.
-`profile: prod` selects the production compaction prompt but does not enable the
-mechanism. Without an explicit `trigger_tokens`, the trigger is
+`profile: prod` enables compaction by default in Harbor, the CLI, and `run_local`,
+and selects the production compaction prompt; set `enabled: false` to turn it off.
+`profile: train` compacts only when `enabled: true` is set. The example sets it
+explicitly either way. Without an explicit `trigger_tokens`, the trigger is
 `min(85% of context_window_tokens, context_window_tokens - 30000)`. The example
 pins the resulting 101,072-token trigger. This is checked between model calls;
 it is not a hard upper bound on each request's input.
