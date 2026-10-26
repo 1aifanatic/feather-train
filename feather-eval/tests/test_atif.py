@@ -145,12 +145,17 @@ def test_reexport_removes_only_stale_trajectory_files(tmp_path):
     first = RunResult(
         stop_reason="completed",
         num_turns=2,
-        compactions=0,
+        compactions=1,
         segments=(
             TraceSegment(
                 kind="execution",
                 input=(UserMessage(content="First task"),),
                 messages=(AssistantMessage(content="First answer"),),
+            ),
+            TraceSegment(
+                kind="compaction",
+                input=(UserMessage(content="Summarize"),),
+                messages=(AssistantMessage(content="summary"),),
             ),
             TraceSegment(
                 kind="execution",
@@ -173,6 +178,9 @@ def test_reexport_removes_only_stale_trajectory_files(tmp_path):
     )
     output = tmp_path / "agent"
     write_atif(first, output, agent=AGENT, session_id="first")
+    assert {"trajectory.cont-1.json", "trajectory.summarization-1.json"} <= {
+        path.name for path in output.iterdir()
+    }
     unrelated = output / "trajectory.custom.json"
     unrelated.write_text("keep")
 
