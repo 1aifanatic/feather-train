@@ -243,6 +243,35 @@ def test_grader_trajectory_preserves_execution_and_total_usage():
     assert trajectory.final_metrics.extra["model_calls"] == 3
 
 
+def test_grader_usage_skips_supplied_assistant_history():
+    result = RunResult(
+        stop_reason="completed",
+        num_turns=1,
+        compactions=0,
+        segments=(
+            TraceSegment(
+                kind="execution",
+                input=(
+                    UserMessage(content="earlier"),
+                    AssistantMessage(content="Earlier answer"),
+                    UserMessage(content="task"),
+                ),
+                messages=(AssistantMessage(content="Final answer"),),
+                calls=(ProviderUsage(kind="agent", usage={"prompt_tokens": 10}),),
+            ),
+        ),
+    )
+
+    trajectory = to_atif(result, agent=AGENT, session_id="run", grader=True)["trajectory.json"]
+
+    supplied, produced = [step for step in trajectory.steps if step.source == "agent"]
+    assert supplied.is_copied_context is True
+    assert supplied.metrics is None
+    assert produced.message == "Final answer"
+    assert produced.metrics.prompt_tokens == 10
+    assert all(step.is_copied_context is None for step in trajectory.steps if step.source == "user")
+
+
 def test_cli_converts_train_evidence_into_one_grader_trajectory(tmp_path):
     result = RunResult(
         stop_reason="completed",
