@@ -17,7 +17,11 @@ from .helpers import GraderSandbox, task
         ("poll_timeout", -1),
         ("poll_timeout", float("nan")),
         ("poll_timeout", float("inf")),
+        ("judge_retry_backoff_seconds", -1),
+        ("judge_retry_backoff_seconds", float("nan")),
         ("judge_retry_backoff_seconds", float("inf")),
+        ("judge_retry_max_backoff_seconds", -1),
+        ("judge_retry_max_backoff_seconds", float("nan")),
         ("judge_retry_max_backoff_seconds", float("inf")),
     ],
 )
