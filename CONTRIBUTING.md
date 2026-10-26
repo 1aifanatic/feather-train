@@ -21,12 +21,16 @@ repository and clone your fork:
 git clone https://github.com/YOUR-USER/feather-train.git
 cd feather-train
 git remote add upstream https://github.com/paper-instruments/feather-train.git
-git switch -c your-change
 ```
 
-Keep each branch focused on one logical change. Before starting, update from
-upstream `main` so the branch contains only the commits intended for its pull
-request.
+Keep each branch focused on one logical change. Start every branch from the
+current upstream `main`, so it contains only the commits intended for its pull
+request:
+
+```bash
+git fetch upstream
+git switch -c your-change upstream/main
+```
 
 ## Install and run focused checks
 
@@ -36,12 +40,12 @@ The lockfile is authoritative, so include `--locked` when syncing.
 ### Harness
 
 ```bash
-uv sync --package feather-harness --extra dev --locked
+uv sync --package feather-harness --extra office --extra dev --locked
 uv run --no-sync ruff check feather-harness/src feather-harness/tests
 uv run --no-sync pytest -c feather-harness/pyproject.toml feather-harness/tests -q
 ```
 
-Add `--extra office` when exercising document dependencies. The optional
+The image tests import Pillow, which the `office` extra provides. The optional
 `token-count` extra must be installed separately from Train's `training` extra.
 
 ### Train
@@ -83,11 +87,15 @@ uv run --no-sync pytest -c feather-train/pyproject.toml feather-train/tests -m '
 uv run --no-sync pytest -c feather-eval/pyproject.toml feather-eval/tests -q
 ```
 
-Packaging changes also need a distribution build; CI clean-installs the built
-wheels outside the checkout:
+Packaging changes also need a distribution build. CI installs the built wheels
+into a fresh environment outside the checkout and runs the entrypoints; to repeat
+that locally:
 
 ```bash
 uv build --all-packages --out-dir dist
+uv venv /tmp/feather-wheels
+uv pip install --python /tmp/feather-wheels/bin/python dist/*.whl
+(cd /tmp && feather-wheels/bin/feather --help && feather-wheels/bin/feather-atif --help)
 ```
 
 ## Submit the pull request
